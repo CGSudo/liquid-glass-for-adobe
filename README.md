@@ -1,25 +1,42 @@
-# Liquid Glass for Photoshop and Illustrator: Sudo Liquid Glass (Apple iOS 26 glass effect plugin)
+# Liquid Glass for Adobe: Apple's Liquid Glass effect for Photoshop and Illustrator (free plugin)
 
 **Stop faking glass. Make it real, keep it live.**
 
-You know the routine. Merge a copy of the background, blur it, clip it to a shape, paint in some highlights, and it looks… fine. Then the client moves one element and you get to do it all again.
-
-**Sudo Liquid Glass** is a free, open-source plugin for **Photoshop** and **Illustrator** that turns your own shapes and text into real, live glass in one click. It's Apple's **Liquid Glass** look from iOS 26 and macOS Tahoe, with true refraction. Nothing gets merged or flattened, and it re-renders whenever anything changes.
+**Liquid Glass for Adobe** (by CGSudo) is a free, open-source plugin that recreates Apple's **Liquid Glass** material from **iOS 26** and **macOS Tahoe** inside **Adobe Photoshop** and **Adobe Illustrator**. Your own shapes and text become real, refracting glass in one click. Nothing gets merged or flattened, and the glass re-renders whenever anything behind it changes.
 
 > One click. Real refraction. Zero flattened layers.
 
-![Sudo Liquid Glass: engine test render](preview_liquid.png)
+![Liquid Glass for Adobe: engine render of the Liquid Glass effect](preview_liquid.png)
 
-**Download:** [latest release](../../releases/latest)
-One download, `SudoLiquidGlass-<version>.zip`, for both apps:
-- **Photoshop** 2023 (v24.2) or newer, Windows and macOS (Intel and Apple Silicon).
-- **Illustrator** 2026 on Windows.
+## Download
+Get everything from the **[latest release](../../releases/latest)**:
+
+| You want | Download | Works on |
+|---|---|---|
+| **Everything, one click** (Photoshop + Illustrator) | `LiquidGlass-for-Adobe-<version>-Setup.exe` | Windows 10 / 11 |
+| **Everything for Windows and Mac** in one zip | `LiquidGlass-for-Adobe-<version>-AIO-Windows-Mac.zip` | Windows + macOS |
+| **Photoshop only** | `LiquidGlass-for-Adobe-Photoshop-<version>.ccx` | Windows + macOS |
+| **Illustrator only** | `LiquidGlass-for-Adobe-Illustrator-<version>-Windows.zip` | Windows |
+| **Source code, Photoshop plugin** | `LiquidGlass-for-Adobe-Photoshop-<version>-source.zip` | |
+| **Source code, Illustrator plug-in** | `LiquidGlass-for-Adobe-Illustrator-<version>-source.zip` | |
+
+![The Windows Setup: a glass window with a live tour of every look](docs/setup.png)
 
 > **Honest status:**
-> - Photoshop and Illustrator are tested on Windows.
-> - The Photoshop package has no platform-specific code, but it hasn't been tested on a Mac yet. If you try it, please [open an issue](../../issues).
-> - **Illustrator is Windows only.** A Mac build needs Xcode on a Mac and isn't made yet.
-> - The images here are renders from the plugin's own engine on test shapes, not app screenshots. Real screenshots and a demo video are coming.
+> - Tested on Windows with Photoshop 2026 and Illustrator 2026.
+> - The Photoshop plugin has no platform-specific code but hasn't been tested on a Mac yet. If you try it, please [open an issue](../../issues).
+> - **Illustrator is Windows only for now.** A Mac build is planned.
+> - The effect images here are renders from the plugin's own engine on test shapes.
+> - Setup isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC": click **More info › Run anyway**.
+
+## Install
+- **Windows (both apps):** close Photoshop and Illustrator, run `LiquidGlass-for-Adobe-<version>-Setup.exe` and click **Install**. Windows asks once for permission (Illustrator's Plug-ins folder needs it). Setup installs into every Photoshop and Illustrator it finds. IT admins: `Setup.exe --silent`.
+- **Mac or Photoshop only:** double-click `LiquidGlass-for-Adobe-Photoshop-<version>.ccx`. The Creative Cloud desktop app installs it.
+- **Illustrator only, by hand:** unzip and copy `LiquidGlass.aip` into `C:\Program Files\Adobe\Adobe Illustrator <version>\Plug-ins\Liquid Glass\`.
+
+Then: **Photoshop › Plugins › Liquid Glass for Adobe**, or in Illustrator select a shape and choose **Effect › Stylize › Liquid Glass…**.
+
+Needs Photoshop 2023 (v24.2) or newer, or Illustrator 2026, and the Creative Cloud desktop app for Photoshop plugins.
 
 ## Why designers switch
 - **"I re-did that glass five times today."** The glass reads what's behind it on every change. Move the photo, edit the text, nudge the shape: the glass catches up by itself.
@@ -30,29 +47,15 @@ One download, `SudoLiquidGlass-<version>.zip`, for both apps:
 ## Features
 - **One click, non-destructive:** works on your shape and text layers (Photoshop) or any shape, group or text as a live effect (Illustrator).
 - **Live updates:** move, resize or reshape the glass, edit the text, or change anything behind it, and the glass re-renders.
-- **Looks:** Liquid Glass, Clear, Frosted, Glassmorphism, Ice, Smoked, Crystal, Bubble and Film frost, each with a preview card. **Save your own looks** and use them in every document.
-- **Quick controls:** Frost, Lens, Edge width and Shine stay on screen, so any look is one drag away from yours.
+- **9 looks:** Liquid Glass, Clear, Frosted, Glassmorphism, Ice, Smoked, Crystal, Bubble and Film frost. **Save your own looks** and use them in every document.
+- **Quick controls:** Frost, Lens, Edge width and Shine stay on screen, with fine control at low values.
 - **Exact outlines:** rectangles, ellipses, Pen paths, combined shapes, and the letter outlines of **text**. In Illustrator, strokes and variable-width profiles become glass too.
 - **Liquid merge:** several shapes melt together, growing liquid bridges with rounded inner corners.
 - **Real optics:** lens refraction, light dispersion (rainbow edge), frost, vividness, tint, two rim lights with a direction dial, and a bevel/emboss.
 - **Advanced controls:** emboss, rim line, glass type (index of refraction from air to diamond) and sheen.
-- **Inner glow** with colour and blend modes (Normal, Screen, Overlay, Soft light, Add, Multiply).
-- **Stroke** just inside the edge, in a solid colour or a gradient that can fade away.
-- **Drop shadow** and **Dim background**, each with an on/off switch.
-- **Film grain by film format:** monochrome grain sized from Super 8 to 4×5 large format.
-- **Explained in plain words:** every setting has a small icon and a hover explanation.
+- **Inner glow** with blend modes, **stroke** in a solid colour or gradient, **drop shadow**, **dim background** and **film grain**.
+- **Explained in plain words:** every setting has a small icon and a hover explanation; double-click a setting's name to reset it.
 - **Fast:** the renderer is written in **Rust** (WebAssembly in Photoshop, native in Illustrator).
-
-## Install
-1. Download `SudoLiquidGlass-<version>.zip` from the [latest release](../../releases/latest) and unzip it.
-2. Close Photoshop and Illustrator.
-3. **Windows:** double-click **`Install on Windows.bat`**. It installs into every Photoshop and Illustrator it finds; allow it when Windows asks for admin rights (Illustrator's Plug-ins folder needs them).
-   **Mac:** double-click **`Install on Mac.command`** (Photoshop; if macOS blocks it, right-click › Open).
-4. **Photoshop:** open **Plugins › Sudo Liquid Glass**. **Illustrator:** select a shape and choose **Effect › Stylize › Liquid Glass…**.
-
-The zip also holds the plugins themselves: `SudoLiquidGlass.ccx` (Photoshop, can be double-clicked) and `LiquidGlass.aip` (Illustrator).
-
-**Why `.ccx` and not `.zxp`?** ZXP is the package format for Adobe's older CEP extensions. The Photoshop plugin is a modern UXP plugin, and Adobe packages those as `.ccx`, the same format its own plugin marketplace uses. The Illustrator plugin is a native `.aip` plug-in.
 
 ## How to use
 **Photoshop**
@@ -74,18 +77,32 @@ The zip also holds the plugins themselves: `SudoLiquidGlass.ccx` (Photoshop, can
 **Illustrator**
 1. Select a shape, group or text and choose **Effect › Stylize › Liquid Glass…**.
 2. Pick a look and adjust it in the settings window; **Preview** shows changes on the artboard.
-3. To change it later, double-click **Liquid Glass** in the Appearance panel, or use **Object › Edit Liquid Glass…** (you can give it a shortcut in Edit › Keyboard Shortcuts).
+3. To change it later, double-click **Liquid Glass** in the Appearance panel, or use **Object › Edit Liquid Glass…**.
 4. **Object › Refresh All Liquid Glass** re-reads the background of every glass. The glass also refreshes by itself when the art behind it changes.
 
 Liquid Glass refuses things that can't work and tells you why: pixel images, groups that contain an image, and a second Liquid Glass on the same object.
 
-## How to make Apple's Liquid Glass effect in Photoshop or Illustrator
-Without a plugin, you blur a merged copy of the background, clip it to a shape, and add bevels and highlights by hand. That's a static fake, and it breaks the moment anything moves. Sudo Liquid Glass computes real refraction from the live artwork behind your shape and keeps it up to date.
+## FAQ
+**How do I make Apple's Liquid Glass effect in Photoshop?**
+Install Liquid Glass for Adobe, select a shape or text layer and click **Make Glass**. Without a plugin you would blur a merged copy of the background, clip it to a shape and paint highlights by hand: a static fake that breaks the moment anything moves.
+
+**How do I make the iOS 26 glass effect in Illustrator?**
+Select a shape, group or text and choose **Effect › Stylize › Liquid Glass…**. It is a live effect in the Appearance panel, so the shape stays editable.
+
+**Is it free?** Yes. It is open source under the MIT licence.
+
+**Is this glassmorphism?** Glassmorphism is frosted blur with a light border. Liquid Glass adds real refraction: the edge bends and magnifies what's behind it, with a rainbow fringe and rim light. The plugin does both (try the *Glassmorphism* and *Frosted* looks).
+
+**Does it work on Mac?** The Photoshop plugin runs on macOS (Intel and Apple Silicon) but hasn't been tested on a Mac yet. Illustrator is Windows only for now.
+
+**Does it flatten or change my layers?** No. Your shapes and text stay editable, and reading the background never changes the document.
+
+**Is it made by Adobe or Apple?** No. It is an independent project by CGSudo.
 
 ## Roadmap
 - [x] **Photoshop** (Windows and macOS): available
 - [x] **Illustrator** (Windows): available
-- [ ] **Illustrator for Mac**: planned (needs a Mac build)
+- [ ] **Illustrator for Mac**: planned
 - [ ] **After Effects** and **Premiere Pro**: planned, not started
 - [ ] GPU rendering, linear-light blending, light/dark adaptive tint
 
@@ -93,11 +110,11 @@ Without a plugin, you blur a merged copy of the background, clip it to a shape, 
 ```
 core/        Rust renderer (glass_core): backdrop + shape masks → glass layer + shadow layer
 photoshop/   UXP plugin: panel, live updates, vector and text outline reader, WebAssembly bridge;
-             looks.js (defaults, looks and icons) is shared with Illustrator
+             looks.js (defaults, looks and icons) is shared with Illustrator and Setup
 illustrator/ native Live Effect (C++, Illustrator SDK) with a WebView2 settings window
-installer/   the one-click installers (Windows: both apps; Mac: Photoshop) shipped in the release zip
+setup/       the Windows Setup.exe: glass window, live tour of the looks, one-click install of both plugins
 preview/     renders the preview images from test shapes
-docs/        full project history and handoff notes
+docs/        project website (GitHub Pages) and the full project history
 ```
 1. Each shape becomes a signed distance field. Several shapes join through a smooth union, which makes the liquid merge.
 2. A squircle bevel gives surface normals. Those drive Snell refraction with per-channel dispersion, then bevel shading, rim lights, inner glow and stroke.
@@ -118,9 +135,11 @@ npm test
 ```bash
 cargo build -p glass_core --release --target wasm32-unknown-unknown
 ```
-Package as `dist/SudoLiquidGlass.ccx` and install with `powershell -ExecutionPolicy Bypass -File install.ps1` (Windows) or `sh install.sh` (macOS). Add `-NoInstall` / `--no-install` to only build the package.
+Package as `dist/LiquidGlass-for-Adobe.ccx` and install with `powershell -ExecutionPolicy Bypass -File install.ps1` (Windows) or `sh install.sh` (macOS). Add `-NoInstall` / `--no-install` to only build the package.
 
 **Illustrator (Windows):** needs Visual Studio C++ Build Tools, the [Illustrator SDK](https://developer.adobe.com/console) and the Microsoft.Web.WebView2 NuGet package. See [illustrator/README.md](illustrator/README.md).
+
+**Setup.exe and every release file:** `powershell -ExecutionPolicy Bypass -File release.ps1` builds both plugins, Setup.exe and all downloads into `dist/release`.
 
 ## Known limits
 - RGB documents only in Photoshop; Illustrator works in RGB and warns in CMYK documents.
@@ -129,7 +148,7 @@ Package as `dist/SudoLiquidGlass.ccx` and install with `powershell -ExecutionPol
 - Brush strokes in Photoshop don't trigger an update: press **Refresh**.
 
 ## About
-Made by **CGSudo**. [Connect on LinkedIn](https://www.linkedin.com/in/cgsudo).
+Made by **CGSudo**. [Connect on LinkedIn](https://www.linkedin.com/in/cgsudo). Website: [cgsudo.github.io/liquid-glass-for-adobe](https://cgsudo.github.io/liquid-glass-for-adobe/).
 
 ## License
-[MIT](LICENSE) © CGSudo. Not affiliated with Apple or Adobe. "Liquid Glass" refers to Apple's design material; Photoshop and Illustrator are trademarks of Adobe.
+[MIT](LICENSE) © CGSudo. Liquid Glass for Adobe is an independent project, not affiliated with or endorsed by Adobe or Apple. Adobe, Photoshop and Illustrator are trademarks of Adobe; "Liquid Glass" refers to Apple's design material.

@@ -1,5 +1,5 @@
 {
-  "name": "sudo-liquid-glass",
+  "name": "liquid-glass-for-adobe",
   "private": true,
   "description": "Dev tooling only: the plugin itself has no npm dependencies.",
   "scripts": {

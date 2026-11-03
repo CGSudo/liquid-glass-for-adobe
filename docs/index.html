@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liquid Glass for Adobe: Apple Liquid Glass effect plugin for Photoshop &amp; Illustrator (free)</title>
+<meta name="description" content="Free plugin that makes Apple's iOS 26 Liquid Glass effect in Adobe Photoshop and Illustrator: real refraction from your own shapes and text, live and non-destructive. Windows and Mac.">
+<meta name="keywords" content="liquid glass photoshop, liquid glass illustrator, apple liquid glass effect, ios 26 glass effect, glassmorphism plugin, photoshop plugin, illustrator plugin, frosted glass effect">
+<meta name="author" content="CGSudo">
+<link rel="canonical" href="https://cgsudo.github.io/liquid-glass-for-adobe/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Liquid Glass for Adobe: Apple's Liquid Glass in Photoshop & Illustrator">
+<meta property="og:description" content="Free plugin: your shapes and text become real, live, refracting glass in one click. By CGSudo.">
+<meta property="og:url" content="https://cgsudo.github.io/liquid-glass-for-adobe/">
+<meta property="og:image" content="https://cgsudo.github.io/liquid-glass-for-adobe/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Liquid Glass for Adobe">
+<meta name="twitter:description" content="Apple's Liquid Glass effect for Photoshop & Illustrator. Free, open source, live and non-destructive.">
+<meta name="twitter:image" content="https://cgsudo.github.io/liquid-glass-for-adobe/og.png">
+<meta name="theme-color" content="#0d4431">
+<link rel="icon" href="logo.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Liquid Glass for Adobe",
+  "alternateName": ["Liquid Glass plugin for Photoshop", "Liquid Glass plugin for Illustrator", "Sudo Liquid Glass"],
+  "description": "Free, open-source plugin that recreates Apple's iOS 26 Liquid Glass material in Adobe Photoshop and Adobe Illustrator with real, live refraction.",
+  "applicationCategory": "DesignApplication",
+  "applicationSubCategory": "Photoshop plugin, Illustrator plug-in",
+  "operatingSystem": "Windows 10, Windows 11, macOS",
+  "softwareVersion": "0.7.2",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "CGSudo", "url": "https://www.linkedin.com/in/cgsudo" },
+  "downloadUrl": "https://github.com/CGSudo/liquid-glass-for-adobe/releases/latest",
+  "codeRepository": "https://github.com/CGSudo/liquid-glass-for-adobe",
+  "screenshot": "https://cgsudo.github.io/liquid-glass-for-adobe/setup.png",
+  "image": "https://cgsudo.github.io/liquid-glass-for-adobe/og.png"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "How do I make Apple's Liquid Glass effect in Photoshop?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Install the free Liquid Glass for Adobe plugin, select a shape or text layer and click Make Glass. The glass refracts whatever is behind it and updates live." } },
+    { "@type": "Question", "name": "How do I make the iOS 26 glass effect in Illustrator?",
+      "acceptedAnswer": { "@type": "Answer", "text": "With Liquid Glass for Adobe installed, select a shape, group or text and choose Effect › Stylize › Liquid Glass. It is a live effect, so the shape stays editable." } },
+    { "@type": "Question", "name": "Is Liquid Glass for Adobe free?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. It is free and open source under the MIT licence." } },
+    { "@type": "Question", "name": "What is the difference between Liquid Glass and glassmorphism?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Glassmorphism is a frosted blur with a light border. Liquid Glass adds real refraction: the edge bends and magnifies what's behind it, with a rainbow fringe and rim light. The plugin does both." } },
+    { "@type": "Question", "name": "Does it work on Mac?",
+      "acceptedAnswer": { "@type": "Answer", "text": "The Photoshop plugin runs on macOS and Windows. The Illustrator plug-in is Windows only for now." } }
+  ]
+}
+</script>
+<style>
+  :root { --green-900: #0d4431; --green-700: #17694c; --green-500: #2fae7c; --green-400: #45c891; --ink: #0b0e0d;
+    --text: #eef5f1; --dim: rgba(238, 245, 241, 0.7); --edge: rgba(255, 255, 255, 0.14); --glass: rgba(255, 255, 255, 0.06); }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; color: var(--text); background: var(--ink); font: 16px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .bg { position: fixed; inset: 0; z-index: -1; background:
+      radial-gradient(40% 35% at 15% 20%, rgba(54, 209, 220, 0.35), transparent 70%),
+      radial-gradient(35% 30% at 85% 25%, rgba(255, 95, 109, 0.30), transparent 70%),
+      radial-gradient(40% 35% at 70% 85%, rgba(123, 92, 255, 0.30), transparent 70%),
+      radial-gradient(45% 40% at 20% 90%, rgba(47, 174, 124, 0.30), transparent 70%), var(--ink); }
+  a { color: var(--green-400); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  .glass { background: var(--glass); border: 1px solid var(--edge); border-top-color: rgba(255, 255, 255, 0.28); border-radius: 18px;
+    backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+  nav { display: flex; align-items: center; gap: 12px; padding: 18px 0; }
+  nav img { width: 36px; height: 36px; border-radius: 9px; }
+  nav b { font-size: 17px; } nav span { color: var(--dim); font-size: 14px; }
+  nav .sp { flex: 1; } nav a { color: var(--dim); text-decoration: none; font-size: 14px; } nav a:hover { color: var(--text); }
+  header { text-align: center; padding: 56px 0 28px; }
+  h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.08; margin: 0 0 16px; letter-spacing: -0.8px; }
+  h1 em { font-style: normal; background: linear-gradient(90deg, var(--green-400), #9be7ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { max-width: 720px; margin: 0 auto 28px; color: var(--dim); font-size: 19px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 12px; font-weight: 650; text-decoration: none; }
+  .btn.primary { background: var(--green-500); color: #062418; box-shadow: 0 10px 30px rgba(47, 174, 124, 0.4); }
+  .btn.primary:hover { background: var(--green-400); }
+  .btn.ghost { color: var(--text); }
+  .btn.ghost:hover { background: rgba(255, 255, 255, 0.1); }
+  .small { color: var(--dim); font-size: 13px; margin-top: 14px; }
+  .shot { margin: 40px auto 0; padding: 10px; max-width: 940px; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
+  section { padding: 56px 0 0; }
+  h2 { font-size: 30px; margin: 0 0 20px; letter-spacing: -0.3px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--dim); font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  td, th { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--edge); }
+  th { color: var(--dim); font-weight: 600; }
+  details { padding: 16px 20px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 650; }
+  details p { color: var(--dim); margin: 10px 0 0; }
+  footer { padding: 56px 0 40px; color: var(--dim); font-size: 13px; text-align: center; }
+  :focus-visible { outline: 2px solid var(--green-400); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="wrap">
+  <nav>
+    <img src="logo.png" alt="CGSudo logo">
+    <div><b>Liquid Glass for Adobe</b> <span>by CGSudo</span></div>
+    <span class="sp"></span>
+    <a href="#features">Features</a><a href="#download">Download</a><a href="#faq">FAQ</a>
+    <a href="https://github.com/CGSudo/liquid-glass-for-adobe">GitHub</a>
+  </nav>
+
+  <header>
+    <h1>Apple's <em>Liquid Glass</em> effect<br>for Photoshop &amp; Illustrator</h1>
+    <p class="lead">A free plugin that turns your own shapes and text into real, refracting glass in one click, like iOS 26 and macOS Tahoe. Live, non-destructive, and it updates whenever anything behind it changes.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/CGSudo/liquid-glass-for-adobe/releases/latest">Download free</a>
+      <a class="btn ghost glass" href="https://github.com/CGSudo/liquid-glass-for-adobe">View on GitHub</a>
+    </div>
+    <p class="small">Windows: one Setup.exe installs both apps · Mac: Photoshop plugin (.ccx) · MIT licence</p>
+  </header>
+
+  <div class="shot glass"><img src="setup.png" width="920" height="600" alt="Liquid Glass for Adobe Setup window showing a live render of the Clear glass look"></div>
+
+  <section id="features">
+    <h2>Real glass, not a blur</h2>
+    <div class="grid">
+      <div class="card glass"><h3>One click</h3><p>Select shapes or text and click Make Glass (Photoshop), or apply Effect › Stylize › Liquid Glass (Illustrator).</p></div>
+      <div class="card glass"><h3>Real refraction</h3><p>The edge bends and magnifies what's behind it, with a rainbow fringe, rim lights and a bevel, like Apple's material.</p></div>
+      <div class="card glass"><h3>Always live</h3><p>Move the glass, edit the text or change the background: the glass re-renders by itself. Nothing is flattened.</p></div>
+      <div class="card glass"><h3>9 looks + your own</h3><p>Liquid Glass, Clear, Frosted, Glassmorphism, Ice, Smoked, Crystal, Bubble and Film frost. Save your own looks.</p></div>
+      <div class="card glass"><h3>Liquid merge</h3><p>Shapes close to each other melt together with smooth liquid bridges.</p></div>
+      <div class="card glass"><h3>Fast Rust engine</h3><p>WebAssembly in Photoshop, native in Illustrator. The same engine renders the looks in the installer.</p></div>
+    </div>
+  </section>
+
+  <section id="download">
+    <h2>Download</h2>
+    <div class="glass" style="padding: 6px 8px">
+      <table>
+        <tr><th>You want</th><th>File</th><th>Works on</th></tr>
+        <tr><td>Everything, one click</td><td>LiquidGlass-for-Adobe-…-Setup.exe</td><td>Windows 10 / 11</td></tr>
+        <tr><td>Everything for Windows and Mac</td><td>…-AIO-Windows-Mac.zip</td><td>Windows + macOS</td></tr>
+        <tr><td>Photoshop only</td><td>LiquidGlass-for-Adobe-Photoshop-….ccx</td><td>Windows + macOS</td></tr>
+        <tr><td>Illustrator only</td><td>LiquidGlass-for-Adobe-Illustrator-…-Windows.zip</td><td>Windows</td></tr>
+        <tr><td>Source code</td><td>…-Photoshop-…-source.zip, …-Illustrator-…-source.zip</td><td></td></tr>
+      </table>
+    </div>
+    <p class="small">All files are on the <a href="https://github.com/CGSudo/liquid-glass-for-adobe/releases/latest">latest release</a>. Tested on Windows; the Photoshop plugin should run on macOS but hasn't been tested on a Mac yet.</p>
+  </section>
+
+  <section id="faq">
+    <h2>FAQ</h2>
+    <details class="glass" open><summary>How do I make Apple's Liquid Glass effect in Photoshop?</summary><p>Install Liquid Glass for Adobe, select a shape or text layer and click <b>Make Glass</b>. Without a plugin you would blur a merged copy of the background and paint highlights by hand, a static fake that breaks when anything moves.</p></details>
+    <details class="glass"><summary>How do I make the iOS 26 glass effect in Illustrator?</summary><p>Select a shape, group or text and choose <b>Effect › Stylize › Liquid Glass…</b>. It is a live effect, so the shape stays editable.</p></details>
+    <details class="glass"><summary>Liquid Glass or glassmorphism?</summary><p>Glassmorphism is frosted blur with a light border. Liquid Glass adds real refraction at the edge. The plugin does both: try the Glassmorphism and Frosted looks.</p></details>
+    <details class="glass"><summary>Is it free? Does it work on Mac?</summary><p>Free and open source (MIT). The Photoshop plugin runs on Windows and macOS; the Illustrator plug-in is Windows only for now.</p></details>
+    <details class="glass"><summary>Is it made by Adobe or Apple?</summary><p>No. Liquid Glass for Adobe is an independent project by CGSudo.</p></details>
+  </section>
+
+  <footer>
+    Made by <a href="https://www.linkedin.com/in/cgsudo">CGSudo</a> · <a href="https://github.com/CGSudo/liquid-glass-for-adobe">Source on GitHub</a> · MIT licence<br>
+    Independent project, not affiliated with or endorsed by Adobe or Apple. Adobe, Photoshop and Illustrator are trademarks of Adobe. "Liquid Glass" refers to Apple's design material.
+  </footer>
+</div>
+</body>
+</html>

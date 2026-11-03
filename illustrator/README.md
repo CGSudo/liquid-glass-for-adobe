@@ -1,4 +1,4 @@
-# Sudo Liquid Glass for Illustrator (Windows)
+# Liquid Glass for Adobe: the Illustrator plug-in (Windows)
 
 A native Illustrator **Live Effect**: **Effect › Stylize › Liquid Glass…**. It lives in the Appearance panel, and Illustrator re-runs it whenever the shape changes.
 

@@ -47,7 +47,7 @@ std::wstring DataPath(const wchar_t* name)
 {
 	PWSTR base = nullptr;
 	std::wstring dir;
-	if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &base))) dir = std::wstring(base) + L"\\Sudo Liquid Glass";
+	if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &base))) dir = std::wstring(base) + L"\\Sudo Liquid Glass"; // pre-rename folder: keeps saved presets
 	CoTaskMemFree(base);
 	CreateDirectoryW(dir.c_str(), nullptr);
 	return dir + L"\\" + name;
@@ -274,7 +274,7 @@ bool RunDialog(float* p, const DialogHost& host)
 		return TRUE;
 	}, LPARAM(&blocked));
 	DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME;
-	st.wnd = CreateWindowExW(WS_EX_DLGMODALFRAME, L"SudoLiquidGlassPanel", L"Sudo Liquid Glass", style,
+	st.wnd = CreateWindowExW(WS_EX_DLGMODALFRAME, L"SudoLiquidGlassPanel", L"Liquid Glass for Adobe", style,
 		r.left, r.top, r.right - r.left, r.bottom - r.top, parent, nullptr, inst, &st);
 	if (!st.wnd) return false;
 	open = st.wnd;
@@ -300,9 +300,9 @@ bool RunDialog(float* p, const DialogHost& host)
 	DestroyWindow(st.wnd);
 	open = nullptr;
 	if (FAILED(st.failed))
-		MessageBoxW(parent, L"Sudo Liquid Glass needs the Microsoft Edge WebView2 Runtime to show its settings.\n"
+		MessageBoxW(parent, L"Liquid Glass for Adobe needs the Microsoft Edge WebView2 Runtime to show its settings.\n"
 			L"It comes with Windows 11; on Windows 10 install it from microsoft.com/edge/webview2.",
-			L"Sudo Liquid Glass", MB_ICONWARNING);
+			L"Liquid Glass for Adobe", MB_ICONWARNING);
 	if (!st.ok) memcpy(p, st.orig.data(), sizeof(float) * kParamCount);
 	if (com == S_OK || com == S_FALSE) CoUninitialize();
 	return st.ok;

@@ -718,7 +718,7 @@ function iconEl(name) {
 
 // ---- Looks: built-in and saved looks as cards, one page at a time ----
 let userLooks = [], lookPage = 0, activeLook = "";
-const LOOKS_KEY = "sudoLiquidGlass.looks";
+const LOOKS_KEY = "sudoLiquidGlass.looks"; // pre-rename key: keeps everyone's saved looks
 function loadUserLooks() {
   try {
     const list = JSON.parse(localStorage.getItem(LOOKS_KEY) || "[]");
@@ -946,8 +946,8 @@ function buildUI() {
 // Brand: logo (logo.png in the plugin folder, else the monogram), version, About page and links.
 const LINKS = {
   linkedin: "https://www.linkedin.com/in/cgsudo",
-  github: "https://github.com/CGSudo/sudo-liquid-glass",
-  issues: "https://github.com/CGSudo/sudo-liquid-glass/issues",
+  github: "https://github.com/CGSudo/liquid-glass-for-adobe",
+  issues: "https://github.com/CGSudo/liquid-glass-for-adobe/issues",
 };
 function buildBrand() {
   const fs = require("fs");
@@ -973,7 +973,7 @@ function buildBrand() {
   for (const key of Object.keys(LINKS)) $(key).addEventListener("click", () => open(LINKS[key]));
   $("brandLink").addEventListener("click", () => open(LINKS.linkedin));
   explain($("brandLink"), "CGSudo", "Click to visit the maker on LinkedIn.");
-  explain($("infoBtn"), "About", "About Sudo Liquid Glass, updates and help.");
+  explain($("infoBtn"), "About", "About Liquid Glass for Adobe, updates and help.");
   lastStatus = $("status").textContent;
 }
 

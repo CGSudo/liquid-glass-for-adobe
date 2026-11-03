@@ -41,7 +41,7 @@ const click = (el) => el.dispatchEvent(new win.Event("click"));
 // Panel and brand.
 assert.deepStrictEqual([...win.document.querySelectorAll("#tabs .tab")].map((t) => t.textContent), ["Glass", "Light", "Shadow", "Finish"]);
 assert(win.document.querySelector("#mark img"), "logo shown");
-assert.strictEqual($("footVersion").textContent, "v0.7.1");
+assert.strictEqual($("footVersion").textContent, "v0.7.2");
 assert.strictEqual([...win.document.querySelectorAll(".param")].filter((r) => !r.title).length, 0, "every setting explains itself");
 click($("brandLink"));
 click($("infoBtn"));
@@ -139,7 +139,7 @@ setTimeout(() => {
   win.T("syncFromSelection()");
   setTimeout(() => {
     assert.strictEqual(calls.filter((c) => c[0] === "batchPlay").length, 0);
-    assert.deepStrictEqual(opened, ["https://www.linkedin.com/in/cgsudo", "https://github.com/CGSudo/sudo-liquid-glass", "https://www.linkedin.com/in/cgsudo"]);
+    assert.deepStrictEqual(opened, ["https://www.linkedin.com/in/cgsudo", "https://github.com/CGSudo/liquid-glass-for-adobe", "https://www.linkedin.com/in/cgsudo"]);
     console.log("ui ok");
   }, 10);
 }, 10);

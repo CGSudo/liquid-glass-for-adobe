@@ -1,8 +1,8 @@
 {
   "manifestVersion": 5,
   "id": "com.liquidglass.photoshop",
-  "name": "Sudo Liquid Glass",
-  "version": "0.7.1",
+  "name": "Liquid Glass for Adobe",
+  "version": "0.7.2",
   "main": "index.html",
   "host": {
     "app": "PS",
@@ -13,7 +13,7 @@
       "type": "panel",
       "id": "glassPanel",
       "label": {
-        "default": "Sudo Liquid Glass"
+        "default": "Liquid Glass for Adobe"
       },
       "minimumSize": {
         "width": 260,

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://cgsudo.github.io/liquid-glass-for-adobe/sitemap.xml

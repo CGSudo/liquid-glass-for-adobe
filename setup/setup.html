@@ -1,0 +1,330 @@
+<!doctype html>
+<!-- Liquid Glass for Adobe, Windows Setup page. Hosted by setup.cpp in WebView2 on an acrylic window; talks to it with
+     chrome.webview.postMessage("state" | "install" | "close" | "open:<url>") and gets {type: state | step | finished}.
+     Opened in a normal browser it runs in demo mode. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liquid Glass for Adobe Setup</title>
+<style>
+  /* Tokens, three layers: primitive (raw values) → semantic (meaning) → component. */
+  :root {
+    --green-950: #062418; --green-900: #0d4431; --green-700: #17694c; --green-500: #2fae7c; --green-400: #45c891;
+    --ink-950: #0b0d0c; --ink-900: #141716; --white: #ffffff; --red-400: #ff8a8a; --amber-400: #ffc76a;
+
+    --surface-glass: rgba(255, 255, 255, 0.07); --surface-glass-hover: rgba(255, 255, 255, 0.11);
+    --edge-glass: rgba(255, 255, 255, 0.14); --edge-glass-top: rgba(255, 255, 255, 0.28);
+    --text-primary: #f2f7f4; --text-secondary: rgba(242, 247, 244, 0.68); --text-faint: rgba(242, 247, 244, 0.45);
+    --accent: var(--green-500); --accent-strong: var(--green-400); --on-accent: var(--green-950);
+    --ok: var(--green-400); --warn: var(--amber-400); --bad: var(--red-400);
+    --radius-l: 18px; --radius-m: 12px; --radius-s: 8px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
+    --blur-glass: 22px; --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+    --card-bg: var(--surface-glass); --card-edge: var(--edge-glass); --card-radius: var(--radius-m);
+    --btn-primary-bg: var(--accent); --btn-primary-bg-hover: var(--accent-strong); --btn-primary-text: var(--on-accent);
+    --chip-bg: rgba(10, 14, 12, 0.42);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; color: var(--text-primary);
+    font: 13px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  /* See-through: Windows' acrylic glass is the window background; the tint keeps text readable on any wallpaper. */
+  body { background: radial-gradient(120% 90% at 100% 0%, rgba(23, 105, 76, 0.42), transparent 60%),
+    linear-gradient(160deg, rgba(8, 12, 10, 0.55), rgba(8, 12, 10, 0.72)); display: flex; gap: var(--space-5); padding: var(--space-5); }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  .glass { background: var(--card-bg); border: 1px solid var(--card-edge); border-top-color: var(--edge-glass-top);
+    border-radius: var(--card-radius); backdrop-filter: blur(var(--blur-glass)) saturate(140%);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+
+  /* Stage: the real engine rendering each look live over a moving scene. */
+  .stage { position: relative; flex: 0 0 470px; border-radius: var(--radius-l); overflow: hidden; background: var(--ink-950);
+    border: 1px solid var(--edge-glass); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45); }
+  .stage canvas { width: 100%; height: 100%; display: block; }
+  .tag { position: absolute; top: var(--space-3); left: var(--space-3); padding: 3px 10px; border-radius: 99px; font-size: 11px;
+    color: var(--text-secondary); background: var(--chip-bg); backdrop-filter: blur(10px); border: 1px solid var(--edge-glass); }
+  .tag b { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-strong); margin-right: 6px;
+    vertical-align: 1px; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+  .caption { position: absolute; left: var(--space-3); right: var(--space-3); bottom: var(--space-3); padding: var(--space-3) var(--space-4);
+    display: flex; align-items: center; gap: var(--space-3); border-radius: var(--radius-m); background: var(--chip-bg); }
+  .caption .txt { flex: 1; min-width: 0; transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
+  .caption .txt.out { opacity: 0; transform: translateY(4px); }
+  .caption h3 { margin: 0; font-size: 15px; font-weight: 650; }
+  .caption p { margin: 2px 0 0; color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .count { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .nav { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--text-secondary);
+    border: 1px solid var(--edge-glass); transition: background 0.2s, color 0.2s; }
+  .nav:hover { background: var(--surface-glass-hover); color: var(--text-primary); }
+  .nav:focus-visible, .btn:focus-visible, .link:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+  .bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--accent-strong); width: 0; }
+
+  /* Right side: brand, what gets installed, the one button. */
+  .side { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: var(--space-3); }
+  .brand img { width: 46px; height: 46px; border-radius: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4); }
+  .brand h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: 0.1px; }
+  .brand small { color: var(--text-secondary); font-size: 12px; }
+  .pill { margin-left: auto; align-self: flex-start; font-size: 11px; padding: 2px 9px; border-radius: 99px; color: var(--accent-strong);
+    background: rgba(47, 174, 124, 0.14); border: 1px solid rgba(69, 200, 145, 0.35); }
+  .lead { margin: var(--space-5) 0 var(--space-4); font-size: 22px; line-height: 1.25; font-weight: 650; letter-spacing: -0.2px; }
+  .lead em { font-style: normal; color: var(--accent-strong); }
+  .sub { margin: 0 0 var(--space-5); color: var(--text-secondary); }
+  .apps { padding: var(--space-2) var(--space-4); }
+  .app { display: flex; align-items: center; gap: var(--space-3); height: 52px; }
+  .app + .app { border-top: 1px solid var(--edge-glass); }
+  .app .ic { width: 30px; height: 30px; flex: none; border-radius: var(--radius-s); display: grid; place-items: center;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--edge-glass); color: var(--text-secondary); }
+  .app .nm { font-weight: 600; }
+  .app .st { font-size: 12px; color: var(--text-secondary); }
+  .app .mark { margin-left: auto; width: 22px; height: 22px; flex: none; display: grid; place-items: center; }
+  .st.ok, .mark.ok { color: var(--ok); } .st.warn { color: var(--warn); } .st.bad, .mark.bad { color: var(--bad); }
+  .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.2); border-top-color: var(--accent-strong);
+    animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .grow { flex: 1; }
+  .btn { height: 46px; width: 100%; border-radius: var(--radius-m); font-size: 15px; font-weight: 650; letter-spacing: 0.2px;
+    background: var(--btn-primary-bg); color: var(--btn-primary-text); box-shadow: 0 8px 26px rgba(47, 174, 124, 0.35);
+    transition: background 0.2s, transform 0.12s, box-shadow 0.2s; }
+  .btn:hover:not(:disabled) { background: var(--btn-primary-bg-hover); box-shadow: 0 10px 32px rgba(69, 200, 145, 0.45); }
+  .btn:active:not(:disabled) { transform: scale(0.985); }
+  .btn:disabled { background: rgba(255, 255, 255, 0.1); color: var(--text-faint); box-shadow: none; cursor: default; }
+  .hint { min-height: 36px; margin: var(--space-2) 0 0; font-size: 12px; color: var(--text-secondary); text-align: center; }
+  footer { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-2); font-size: 12px; color: var(--text-faint); }
+  .link { color: var(--text-secondary); border-radius: 4px; }
+  .link:hover { color: var(--text-primary); text-decoration: underline; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  @media (prefers-reduced-motion: reduce) { .tag b, .spin { animation: none; } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="view" aria-label="Live preview of the selected glass look"></canvas>
+  <div class="tag"><b></b>Live engine render</div>
+  <div class="caption glass">
+    <button class="nav" id="prev" aria-label="Previous look"><svg class="i" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+    <div class="txt" id="txt"><h3 id="lookName">Liquid Glass</h3><p id="lookText"></p></div>
+    <span class="count" id="count"></span>
+    <button class="nav" id="next" aria-label="Next look"><svg class="i" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+  </div>
+  <div class="bar" id="bar"></div>
+</div>
+
+<div class="side">
+  <div class="brand">
+    <img src="logo.png" alt="">
+    <div><h1>Liquid Glass for Adobe</h1><small>by CGSudo</small></div>
+    <span class="pill" id="ver">v0.0.0</span>
+  </div>
+  <p class="lead">Real <em>Liquid Glass</em> for Photoshop &amp; Illustrator.</p>
+  <p class="sub">Your own shapes and text become live, refracting glass, the way Apple's iOS 26 does it. It updates whenever anything behind it changes.</p>
+
+  <div class="glass apps" aria-live="polite">
+    <div class="app">
+      <span class="ic"><svg class="i" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2.5"/><path d="m4.5 11 2.5-3 2 2 1.5-1.5 1.5 2.5"/><circle cx="10.5" cy="5.5" r="1"/></svg></span>
+      <div><div class="nm">Photoshop</div><div class="st" id="psSt">Checking…</div></div>
+      <span class="mark" id="psMk"></span>
+    </div>
+    <div class="app">
+      <span class="ic"><svg class="i" viewBox="0 0 16 16"><path d="M3 13.5 8 2.5l5 11M5.2 9.5h5.6"/></svg></span>
+      <div><div class="nm">Illustrator</div><div class="st" id="aiSt">Checking…</div></div>
+      <span class="mark" id="aiMk"></span>
+    </div>
+  </div>
+
+  <div class="grow"></div>
+  <button class="btn" id="go" disabled>Install</button>
+  <p class="hint" id="hint">One click installs into both apps. Windows asks once for permission (for Illustrator).</p>
+  <footer>
+    <button class="link" data-url="https://github.com/CGSudo/liquid-glass-for-adobe">GitHub</button>
+    <button class="link" data-url="https://www.linkedin.com/in/cgsudo">CGSudo on LinkedIn</button>
+    <span class="grow"></span><span>Free &amp; open source · MIT</span>
+  </footer>
+</div>
+
+<script src="looks.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const host = window.chrome && window.chrome.webview;
+const send = (m) => host && host.postMessage(m);
+const { LOOKS, KEEP } = window.SudoLooks;
+
+// One line per look, in the order of looks.js.
+const ABOUT = {
+  "Liquid Glass": "Apple's look: clear centre, bright bending rim.",
+  "Clear": "Crisp, nearly invisible glass with a strong lens.",
+  "Frosted": "Soft frosted blur, like a bathroom window.",
+  "Glassmorphism": "The classic UI card: frost, tint and a fine edge.",
+  "Ice": "Cold blue frost with a glint of grain.",
+  "Smoked": "Dark tinted glass for light backgrounds.",
+  "Crystal": "Deep refraction and rainbow edges, like cut crystal.",
+  "Bubble": "Round, soft and glossy, like a soap bubble.",
+  "Film frost": "Frosted glass with fine film grain.",
+};
+
+// ---- Live preview: scene + glass shapes drawn here, glass rendered by the engine in a worker. ----
+const cv = $("view"), ctx = cv.getContext("2d", { willReadFrequently: true });
+const W = 470, H = 528;
+cv.width = W; cv.height = H;
+const scene = new OffscreenCanvas(W, H), sx = scene.getContext("2d", { willReadFrequently: true });
+const shape = new OffscreenCanvas(W, H), mx = shape.getContext("2d", { willReadFrequently: true });
+const worker = new Worker("setup-worker.js");
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let look = 0, busy = false, t0 = performance.now();
+
+function drawScene(t) {
+  const g = sx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, "#0b1a2e"); g.addColorStop(1, "#1a0f2e");
+  sx.fillStyle = g; sx.fillRect(0, 0, W, H);
+  const blobs = [["#ff5f6d", 0.0, 150], ["#ffc371", 1.7, 120], ["#36d1dc", 3.1, 140], ["#7b5cff", 4.6, 160]];
+  for (const [c, ph, r] of blobs) {
+    const x = W / 2 + Math.cos(t * 0.35 + ph) * 150, y = H / 2 + Math.sin(t * 0.27 + ph * 1.3) * 170;
+    const rg = sx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, c); rg.addColorStop(1, "transparent");
+    sx.fillStyle = rg; sx.fillRect(0, 0, W, H);
+  }
+  sx.strokeStyle = "rgba(255,255,255,0.10)"; sx.lineWidth = 1;
+  for (let x = 0.5; x < W; x += 24) { sx.beginPath(); sx.moveTo(x, 0); sx.lineTo(x, H); sx.stroke(); }
+  sx.fillStyle = "rgba(255,255,255,0.88)"; sx.font = "800 64px 'Segoe UI', sans-serif"; sx.textAlign = "center";
+  sx.fillText("Liquid", W / 2, H / 2 - 18); sx.fillText("Glass", W / 2, H / 2 + 50);
+}
+
+// Two shapes that drift and melt into each other (the engine's liquid merge).
+function drawMasks(t) {
+  const planes = [];
+  const pill = () => {
+    const w = 300, h = 150, x = W / 2 - w / 2 + Math.sin(t * 0.5) * 30, y = H / 2 - h / 2 - 20 + Math.cos(t * 0.4) * 24;
+    mx.beginPath(); mx.roundRect(x, y, w, h, 75); mx.fill();
+  };
+  const dot = () => {
+    const a = t * 0.6, x = W / 2 + Math.cos(a) * 150, y = H / 2 + 95 + Math.sin(a) * 40;
+    mx.beginPath(); mx.arc(x, y, 52, 0, Math.PI * 2); mx.fill();
+  };
+  for (const draw of [pill, dot]) {
+    mx.clearRect(0, 0, W, H); mx.fillStyle = "#fff"; draw();
+    const px = mx.getImageData(0, 0, W, H).data, m = new Uint8Array(W * H);
+    for (let i = 0; i < m.length; i++) m[i] = px[i * 4 + 3];
+    planes.push(m);
+  }
+  const all = new Uint8Array(planes.length * W * H);
+  planes.forEach((p, i) => all.set(p, i * W * H));
+  return all;
+}
+
+function frame() {
+  if (busy) return;
+  busy = true;
+  const t = reduced ? 0 : (performance.now() - t0) / 1000;
+  drawScene(t);
+  const backdrop = new Uint8Array(sx.getImageData(0, 0, W, H).data.buffer);
+  const masks = drawMasks(t);
+  const params = LOOKS[look].values.slice();
+  params[KEEP[0]] = 34; // edge width sized for these shapes, as Make Glass does
+  worker.postMessage({ id: look, params, backdrop, masks, w: W, h: H }, [backdrop.buffer, masks.buffer]);
+}
+worker.onmessage = ({ data }) => {
+  ctx.putImageData(new ImageData(data.rgba, W, H), 0, 0);
+  busy = false;
+  if (!reduced || !rendered++) requestAnimationFrame(frame);
+};
+let rendered = 0;
+
+// ---- Tour: every look in turn; arrows, keys and hover pause it. ----
+const DWELL = 4200;
+let shownAt = performance.now(), paused = false;
+function show(i) {
+  look = (i + LOOKS.length) % LOOKS.length;
+  $("txt").classList.add("out");
+  setTimeout(() => {
+    $("lookName").textContent = LOOKS[look].name;
+    $("lookText").textContent = ABOUT[LOOKS[look].name] || "";
+    $("count").textContent = `${look + 1} / ${LOOKS.length}`;
+    $("txt").classList.remove("out");
+  }, 180);
+  shownAt = performance.now();
+  if (reduced) { rendered = 0; frame(); }
+}
+$("prev").onclick = () => show(look - 1);
+$("next").onclick = () => show(look + 1);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") show(look - 1);
+  if (e.key === "ArrowRight") show(look + 1);
+});
+$("stage").onmouseenter = () => (paused = true);
+$("stage").onmouseleave = () => ((paused = false), (shownAt = performance.now()));
+(function tick() {
+  const f = Math.min(1, (performance.now() - shownAt) / DWELL);
+  $("bar").style.width = (paused ? 0 : f * 100) + "%";
+  if (!paused && f >= 1) show(look + 1);
+  requestAnimationFrame(tick);
+})();
+
+// ---- Install: app status, one button, live results. ----
+const MARK = { done: '<svg class="i" viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7"/></svg>',
+  fail: '<svg class="i" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>', work: '<span class="spin"></span>' };
+let phase = "ready", results = {};
+function setApp(app, cls, text, mark) {
+  $(app + "St").className = "st " + cls;
+  $(app + "St").textContent = text;
+  $(app + "Mk").className = "mark " + cls;
+  $(app + "Mk").innerHTML = mark ? MARK[mark] : "";
+}
+function onState(s) {
+  $("ver").textContent = "v" + s.version;
+  if (phase !== "ready") return;
+  const row = (app, a, name) => {
+    if (!a.found) setApp(app, "", "Not installed on this PC, skipped");
+    else if (a.running) setApp(app, "warn", `Open. Close ${name} to install.`);
+    else setApp(app, "ok", "Ready to install");
+  };
+  row("ps", s.ps, "Photoshop");
+  row("ai", s.ai, "Illustrator");
+  const any = s.ps.found || s.ai.found, open = (s.ps.found && s.ps.running) || (s.ai.found && s.ai.running);
+  $("go").disabled = !any || open;
+  $("hint").textContent = !any ? "Neither Photoshop nor Illustrator was found on this PC."
+    : open ? "Close the apps marked above; the button turns on by itself."
+    : s.ps.found && !s.cc ? "Photoshop needs the Creative Cloud desktop app for plugins."
+    : "One click installs into both apps. Windows asks once for permission (for Illustrator).";
+}
+function onStep(m) {
+  results[m.app] = m.status;
+  setApp(m.app, m.status === "done" ? "ok" : m.status === "fail" ? "bad" : "", m.text, m.status === "skip" ? "" : m.status);
+}
+function onFinished() {
+  phase = "finished";
+  const failed = Object.values(results).includes("fail"), any = Object.values(results).includes("done");
+  $("go").disabled = false;
+  $("go").textContent = failed ? "Try again" : "Done";
+  $("hint").textContent = failed ? "Something needs attention above. Fix it, then try again."
+    : any ? "All set. Restart Photoshop or Illustrator if it was open." : "Nothing was installed.";
+}
+$("go").onclick = () => {
+  if (phase === "finished" && $("go").textContent === "Done") return send("close");
+  phase = "installing";
+  results = {};
+  $("go").disabled = true;
+  $("go").textContent = "Installing…";
+  $("hint").textContent = "Allow the Windows permission prompt when it appears.";
+  send("install");
+};
+for (const a of document.querySelectorAll("[data-url]")) a.onclick = () => send("open:" + a.dataset.url);
+
+if (host) {
+  host.addEventListener("message", (e) => {
+    const m = e.data;
+    if (m.type === "state") onState(m);
+    else if (m.type === "step") onStep(m);
+    else if (m.type === "finished") onFinished();
+  });
+  send("state");
+  setInterval(() => phase === "ready" && send("state"), 1500); // the button turns on once the apps are closed
+} else {
+  onState({ version: "demo", cc: true, ps: { found: true, running: false }, ai: { found: true, running: true } });
+  $("go").onclick = () => $("hint").textContent = "Demo mode: open Setup.exe to install.";
+}
+show(0);
+frame();
+</script>
+</body>
+</html>

@@ -1,12 +1,13 @@
 # AGENTS.md: guide for AI coding agents
 
-Sudo Liquid Glass recreates Apple's Liquid Glass material inside Adobe apps. It is live and non-destructive: the glass reads what is behind it and re-renders, and it never merges or flattens layers.
+**Liquid Glass for Adobe** (by CGSudo; called Sudo Liquid Glass before 0.7.2) recreates Apple's Liquid Glass material inside Adobe apps. It is live and non-destructive: the glass reads what is behind it and re-renders, and it never merges or flattens layers.
 
-- **Today (v0.7.1):**
+- **Today (v0.7.2):**
   - **Photoshop:** a UXP plugin, Windows and macOS (wasm engine, no platform code; tested on Windows only).
   - **Illustrator:** a native Live Effect (`.aip`), **Windows only**.
 - **Goal:** the same engine in **Premiere Pro and After Effects**, and Illustrator on Mac. These are plans: never describe them as available.
-- **Packaging:** Photoshop `.ccx` (UXP; ZXP is for CEP extensions and doesn't apply). Illustrator `.aip`. One release zip holds both; `installer/Install on Windows.bat` installs into every Photoshop and Illustrator it finds.
+- **Packaging:** Photoshop `.ccx` (UXP; ZXP is for CEP extensions and doesn't apply). Illustrator `.aip`. Windows users get one `Setup.exe` (`setup/`) that installs both; Mac users double-click the `.ccx`.
+- **Name:** never put "Adobe" first in the product name (Adobe's trademark rules); "… for Adobe" is the allowed form. Internal ids stay as they were: UXP id `com.liquidglass.photoshop`, localStorage key `sudoLiquidGlass.looks`, `%APPDATA%\Sudo Liquid Glass` (saved presets and log), so upgrades keep users' data.
 
 **New here with zero context?** Read [docs/PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md) first. It explains:
 - the mission and every decision;
@@ -32,8 +33,11 @@ photoshop/*.test.js      engine.test.js / paths.test.js run the real wasm; ui.te
 preview/src/main.rs      renders preview*.png from a synthetic backdrop (engine test renders, not screenshots)
 illustrator/             native Live Effect: Source/*.cpp (render, notifier, menus, checks), ui/panel.html (settings
                          window, WebView2), build.ps1, test/run_test.ps1 (settings window without Illustrator)
-installer/               one-click install scripts shipped in the release zip (Windows .bat: both apps; Mac .command: Photoshop)
-install.ps1 / install.sh package photoshop/ → dist/SudoLiquidGlass.ccx and install via Adobe UPIA (Windows / macOS)
+setup/                   Windows Setup.exe: setup.cpp (Win32 + WebView2 on an acrylic window; installs via UPIA and an elevated
+                         --copy-aip of itself; --silent for IT), setup.html (live looks tour), setup-worker.js, build.ps1
+docs/                    GitHub Pages site (index.html with SEO meta + JSON-LD, sitemap, robots, llms.txt) + PROJECT_HISTORY.md
+release.ps1              builds every release download into dist/release (AIO, per-app, per-app source)
+install.ps1 / install.sh package photoshop/ → dist/LiquidGlass-for-Adobe.ccx and install via Adobe UPIA (Windows / macOS)
 package.json             dev tooling only: `npm install` (jsdom), then `npm test` runs every test
 ```
 
@@ -141,9 +145,12 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -NoInstall
   2. Run `npm test`.
   3. Package with `install.ps1 -NoInstall`.
   4. Build the Illustrator plug-in: `powershell -ExecutionPolicy Bypass -File illustrator/build.ps1 -NoInstall`, and copy `illustrator/build/LiquidGlass.aip` to `dist/`.
-  5. Commit, then build the one-click zip. It holds the `.ccx`, the `.aip` and `installer/` (the .bat files, the Mac .command with its exec bit, and READ ME); `HEAD:installer` flattens the folder:
-     `git archive --format=zip --prefix=SudoLiquidGlass-<ver>/ --add-file=dist/SudoLiquidGlass.ccx --add-file=dist/LiquidGlass.aip -o dist/SudoLiquidGlass-<ver>.zip HEAD:installer`
-  6. Push, then attach that one zip to a GitHub release (the owner wants a single download for both apps).
+  5. Bump `kVersion` (illustrator/Source/LiquidGlassDialog.h), the version in `illustrator/ui/panel.html` and `photoshop/ui.test.js`; update `softwareVersion` in `docs/index.html`.
+  6. Commit, then `powershell -ExecutionPolicy Bypass -File release.ps1`. It runs the tests and writes into `dist/release`:
+     - all-in-one: `LiquidGlass-for-Adobe-<ver>-Setup.exe` (Windows, both apps) and `…-AIO-Windows-Mac.zip`;
+     - each plugin: `LiquidGlass-for-Adobe-Photoshop-<ver>.ccx`, `LiquidGlass-for-Adobe-Illustrator-<ver>-Windows.zip`;
+     - each plugin's source: `…-Photoshop-<ver>-source.zip`, `…-Illustrator-<ver>-source.zip`.
+  7. Push, then attach every file in `dist/release` to the GitHub release (the owner wants all three groups).
 - Be honest in public text: say "tested on Windows", and label engine renders as test renders, not Photoshop screenshots.
 
 ## Roadmap for other hosts (all reuse `lg_render`)

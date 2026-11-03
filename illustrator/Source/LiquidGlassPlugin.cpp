@@ -419,7 +419,7 @@ static void Alert(const wchar_t* text, UINT icon = MB_ICONINFORMATION)
 {
 	AIWindowRef parent = nullptr;
 	sAIAppContext->GetPlatformAppWindow(&parent);
-	MessageBoxW(HWND(parent), text, L"Sudo Liquid Glass", icon | MB_OK);
+	MessageBoxW(HWND(parent), text, L"Liquid Glass for Adobe", icon | MB_OK);
 }
 
 static short ArtType(AIArtHandle a)

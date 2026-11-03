@@ -11,7 +11,7 @@ Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $stage | Out-Null
 Copy-Item (Join-Path $root "photoshop\*") $stage -Exclude *.test.js
 New-Item -ItemType Directory -Force (Join-Path $root "dist") | Out-Null
-$zip = Join-Path $root "dist\SudoLiquidGlass.zip"
+$zip = Join-Path $root "dist\LiquidGlass-for-Adobe.zip"
 Compress-Archive -Path "$stage\*" -DestinationPath $zip -Force
 $ccx = [IO.Path]::ChangeExtension($zip, ".ccx")
 Move-Item $zip $ccx -Force

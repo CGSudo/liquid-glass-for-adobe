@@ -247,6 +247,16 @@ The owner confirmed: **"All working"** (v0.5.5).
   - The live preview was removed.
 - **"One plugin for both Illustrator and Photoshop."** The two apps can't load the same file (Photoshop takes a UXP `.ccx`, Illustrator a native `.aip`), so the release became **one zip** with **one installer per OS**: `Install on Windows.bat` installs into every Photoshop (Adobe UPIA, as the user) and Illustrator (copies the `.aip`, one admin prompt) it finds. `Install on Mac.command` covers Photoshop.
 
+### Phase 15: Liquid Glass for Adobe, Setup.exe and the website [0.7.2]
+- **"Rename it Adobe Liquid Glass; one click installs everything; the Setup should look like glass with an intro of every look; SEO for Google, Bing, GitHub, Reddit and AI search."**
+- **Name:** Adobe's trademark rules don't allow outside products to start with "Adobe", so the owner chose **Liquid Glass for Adobe** (by CGSudo). Internal ids, storage keys and the %APPDATA% folder keep their old names so upgrades keep saved looks and presets. The repo became `CGSudo/liquid-glass-for-adobe` (GitHub redirects the old URL).
+- **One file for both apps is impossible:** Photoshop loads UXP `.ccx` plugins; Illustrator doesn't offer UXP to outside developers (2026) and loads native `.aip` plug-ins. A `.ccx` can't install an `.aip`.
+- **Setup.exe** (`setup/`): a Win32 + WebView2 window with Windows 11 acrylic glass behind a see-through page. The left side is a live tour of all 9 looks rendered by the real wasm engine in a worker (Chromium refuses to compile big wasm on the main thread); the right side shows which apps are installed or open and has one Install button. Photoshop goes through UPIA as the user; Illustrator through an elevated `--copy-aip` copy of Setup, then a byte compare. `--silent` for IT. Static CRT, so no VC++ redistributable.
+  - Tried first: an IExpress self-extractor around the .bat. It never ran its command and was dropped.
+  - RCDATA resources by quoted name weren't found at runtime; numbered resources (101…) work.
+- **Release layout:** AIO (Setup.exe and an AIO zip for Windows + Mac), each plugin on its own, and each plugin's source on its own (`release.ps1`).
+- **SEO:** README rewritten around search phrases with an FAQ; GitHub Pages site in `docs/` with meta, Open Graph, JSON-LD (SoftwareApplication + FAQPage), sitemap, robots and `llms.txt` (also at the repo root) for AI search; repo description and topics.
+
 ## 4. Fundamentals installed on the dev machine (Windows 11)
 
 | Tool | Why | Notes |
