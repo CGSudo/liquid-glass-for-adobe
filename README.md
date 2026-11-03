@@ -6,7 +6,9 @@
 
 > One click. Real refraction. Zero flattened layers.
 
-![Liquid Glass for Adobe: engine render of the Liquid Glass effect](preview_liquid.png)
+![How Liquid Glass for Adobe works: your shape becomes live, refracting glass in one click, moves live, and switches between 9 looks](docs/explainer.webp)
+
+**[Try the live demo](https://cgsudo.github.io/liquid-glass-for-adobe/)**: the real glass engine running in your browser. Drag the glass around and switch looks.
 
 ## Download
 Get everything from the **[latest release](../../releases/latest)**:

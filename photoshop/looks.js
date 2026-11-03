@@ -2,7 +2,7 @@
 // the default settings, the built-in looks and the line icons, so both apps always offer the same things.
 (function (root) {
   // Order = glass_core::Params (42 values). Lengths are px in Photoshop and pt in Illustrator.
-  const DEFAULTS = [-45, 0.6, 80, 16, 20, 12, 30, 0.06, 1.2, 1, 1, 1, 0, 0.25, 24, 8, 0, 1.5, 0, 40, 24, 0.32, 1.2, 1.5, 1, 0, 12, 1, 1, 1,
+  const DEFAULTS = [-45, 0.75, 80, 16, 20, 3, 30, 0.06, 1.2, 1, 1, 1, 0, 0, 24, 8, 0, 1.5, 0, 40, 24, 0.32, 1.2, 1.5, 1, 0, 12, 1, 1, 1,
     0, 0, 1, 0.2, 0, -45, 1, 1, 1, 1, 1, 1];
   // Looks restyle the glass but keep its size-dependent settings: edge width (3) and merge (20).
   const KEEP = [3, 20];

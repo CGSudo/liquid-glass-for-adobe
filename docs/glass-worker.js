@@ -1,4 +1,4 @@
-// Renders the Setup's live look previews with the real glass engine, off the page's thread (Chromium only compiles
+// Renders the live look previews (Setup and website) with the real glass engine, off the page's thread (Chromium only compiles
 // big wasm modules synchronously inside workers). In: {id, params, backdrop, masks, w, h}. Out: {id, rgba} composited
 // like the panels' thumbnails: backdrop, then shadow/dim, then glass.
 self.module = { exports: {} };

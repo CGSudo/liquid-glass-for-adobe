@@ -13,7 +13,7 @@
 #include <share.h>
 #include <string>
 
-const float kDefaults[kParamCount] = { -45, 0.6f, 80, 16, 20, 12, 30, 0.06f, 1.2f, 1, 1, 1, 0, 0.25f, 24, 8, 0, 1.5f, 0, 40, 24, 0.32f, 1.2f, 1.5f, 1, 0, 12, 1, 1, 1,
+const float kDefaults[kParamCount] = { -45, 0.75f, 80, 16, 20, 3, 30, 0.06f, 1.2f, 1, 1, 1, 0, 0, 24, 8, 0, 1.5f, 0, 40, 24, 0.32f, 1.2f, 1.5f, 1, 0, 12, 1, 1, 1,
 	0, 0, 1, 0.2f, 0, -45, 1, 1, 1, 1, 1, 1 };
 // Lengths: stored in pt, converted to px at render.
 static const int kLengths[] = { 3, 5, 14, 15, 17, 19, 20, 22, 26, 31 };
@@ -632,7 +632,8 @@ private:
 			float s = float(std::min(u.right - u.left, u.top - u.bottom));
 			if (count) {
 				p[kDepth] = std::round(std::min(200.f, std::max(8.f, 0.25f * s)));
-				if (p[kFrost] > 0) p[kFrost] = std::round(std::min(200.f, std::max(2.f, 0.06f * s)));
+				// Frost too: the look's value is for a 200 pt shape, so each look keeps its own strength at any size.
+				if (p[kFrost] > 0) p[kFrost] = std::round(std::min(200.f, std::max(1.f, p[kFrost] * s / 200)));
 			}
 			sAIMdMemory->MdMemoryDisposeHandle((AIMdMemoryHandle)matches);
 		}

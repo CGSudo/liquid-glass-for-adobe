@@ -457,8 +457,8 @@ function makeGlass() {
       // Edge thickness scales with the shapes (a quarter of the smallest short side), so big layers get a strong lens too.
       const short = Math.min(...shapes.map((s) => Math.min(s.bounds.right - s.bounds.left, s.bounds.bottom - s.bounds.top)));
       params[DEPTH] = Math.round(Math.min(200, Math.max(8, 0.25 * short)));
-      // Blur scales the same way, so big glass is as frosted as small glass (unless Clear style turned it off).
-      if (params[5] > 0) params[5] = Math.round(Math.min(200, Math.max(2, 0.06 * short)));
+      // Frost scales the same way: the look's value is for a 200 px shape, so each look keeps its own strength at any size.
+      if (params[5] > 0) params[5] = Math.round(Math.min(200, Math.max(1, (params[5] * short) / 200)));
       showParams();
       at("create glass layers");
       const make = (name) => (doc.createPixelLayer ? doc.createPixelLayer({ name }) : doc.createLayer({ name }));

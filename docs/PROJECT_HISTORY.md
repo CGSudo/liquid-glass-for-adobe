@@ -257,6 +257,15 @@ The owner confirmed: **"All working"** (v0.5.5).
 - **Release layout:** AIO (Setup.exe and an AIO zip for Windows + Mac), each plugin on its own, and each plugin's source on its own (`release.ps1`).
 - **SEO:** README rewritten around search phrases with an FAQ; GitHub Pages site in `docs/` with meta, Open Graph, JSON-LD (SoftwareApplication + FAQPage), sitemap, robots and `llms.txt` (also at the repo root) for AI search; repo description and topics.
 
+### Phase 16: Defaults checked across apps, live demo and explainer [0.7.3]
+- **"Check the default effect is exact across Photoshop and Illustrator, and that the defaults look good."**
+  - The 42 defaults were already identical in `looks.js`, Illustrator's `kDefaults` and the engine. Sizes are px in Photoshop and pt in Illustrator (rendered at 2 px per pt), so a glass looks the same relative to the artwork in both.
+  - Found: Make Glass replaced the chosen look's frost with a size-based value, so Frosted and Liquid Glass came out alike. Now the look's frost is scaled per 200 px (pt) of shape, in both apps.
+  - Side-by-side engine renders showed frost 12 was milky (text behind unreadable), more bathroom glass than Apple. New defaults: **frost 3, no drop shadow, shine 0.75**: readable through a light blur, strong edge lensing, crisp rim.
+- **"Bring the Setup's glass animation to GitHub as a cool explainer."**
+  - `setup/stage.js` + `glass-worker.js`: one live stage (real wasm engine in a worker), used by Setup and by the website, where visitors can drag the glass and switch looks.
+  - README: `docs/explainer.webp`, a 17 s recording of the stage in four steps (your shape, Make Glass, move it, the 9 looks). WebP, because the GIF was 14.5 MB and the WebP 1.9 MB.
+
 ## 4. Fundamentals installed on the dev machine (Windows 11)
 
 | Tool | Why | Notes |

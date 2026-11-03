@@ -194,7 +194,7 @@ static void Install()
 // Unpacks the payload into a fresh temp folder: RCDATA 101, 102, … in this order (setup\build.ps1 uses the same list).
 static bool Extract()
 {
-	static const wchar_t* files[] = { L"setup.html", L"setup-worker.js", L"looks.js", L"engine.js", L"glass_core.wasm", L"logo.png",
+	static const wchar_t* files[] = { L"setup.html", L"glass-worker.js", L"stage.js", L"looks.js", L"engine.js", L"glass_core.wasm", L"logo.png",
 		L"LiquidGlass-for-Adobe.ccx", L"LiquidGlass.aip" };
 	gDir = Env(L"TEMP") + L"\\LiquidGlassSetup-" + std::to_wstring(GetCurrentProcessId());
 	CreateDirectoryW(gDir.c_str(), nullptr);

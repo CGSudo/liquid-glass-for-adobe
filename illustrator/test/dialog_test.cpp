@@ -7,7 +7,7 @@
 #include <thread>
 #include <string>
 
-const float kDefaults[kParamCount] = { -45, 0.6f, 80, 16, 20, 12, 30, 0.06f, 1.2f, 1, 1, 1, 0, 0.25f, 24, 8, 0, 1.5f, 0, 40, 24,
+const float kDefaults[kParamCount] = { -45, 0.75f, 80, 16, 20, 3, 30, 0.06f, 1.2f, 1, 1, 1, 0, 0, 24, 8, 0, 1.5f, 0, 40, 24,
 	0.32f, 1.2f, 1.5f, 1, 0, 12, 1, 1, 1,
 	0, 0, 1, 0.2f, 0, -45, 1, 1, 1, 1, 1, 1 };
 static int previews = 0;

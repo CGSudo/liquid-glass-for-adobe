@@ -29,7 +29,7 @@
   "applicationCategory": "DesignApplication",
   "applicationSubCategory": "Photoshop plugin, Illustrator plug-in",
   "operatingSystem": "Windows 10, Windows 11, macOS",
-  "softwareVersion": "0.7.2",
+  "softwareVersion": "0.7.3",
   "license": "https://opensource.org/licenses/MIT",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "CGSudo", "url": "https://www.linkedin.com/in/cgsudo" },
@@ -87,7 +87,18 @@
   .btn.ghost { color: var(--text); }
   .btn.ghost:hover { background: rgba(255, 255, 255, 0.1); }
   .small { color: var(--dim); font-size: 13px; margin-top: 14px; }
-  .shot { margin: 40px auto 0; padding: 10px; max-width: 940px; }
+  .demo { position: relative; margin: 36px auto 0; padding: 10px; max-width: 980px; }
+  .demo canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 12px; background: #0b1a2e; touch-action: none; }
+  .chip { position: absolute; top: 22px; left: 22px; padding: 4px 12px; border-radius: 99px; font-size: 13px; color: var(--dim); box-shadow: none; }
+  .chip b { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green-400); margin-right: 7px; vertical-align: 1px; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+  .looks { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 12px 4px 4px; }
+  .looks button { font: inherit; font-size: 14px; color: var(--dim); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--edge);
+    border-radius: 99px; padding: 6px 14px; cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+  .looks button:hover { color: var(--text); background: rgba(255, 255, 255, 0.1); }
+  .looks button[aria-selected="true"] { color: #062418; background: var(--green-500); border-color: var(--green-500); font-weight: 650; }
+  @media (prefers-reduced-motion: reduce) { .chip b { animation: none; } }
+  .shot { margin: 24px auto 0; padding: 10px; max-width: 940px; }
   .shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
   section { padding: 56px 0 0; }
   h2 { font-size: 30px; margin: 0 0 20px; letter-spacing: -0.3px; }
@@ -126,7 +137,12 @@
     <p class="small">Windows: one Setup.exe installs both apps · Mac: Photoshop plugin (.ccx) · MIT licence</p>
   </header>
 
-  <div class="shot glass"><img src="setup.png" width="920" height="600" alt="Liquid Glass for Adobe Setup window showing a live render of the Clear glass look"></div>
+  <div class="demo glass" id="demo">
+    <canvas id="stage" aria-label="Live demo: the Liquid Glass engine rendering glass over a moving scene. Drag to move the glass."></canvas>
+    <div class="chip glass"><b></b>Live: the real engine, running in your browser · drag the glass</div>
+    <div class="looks" id="looks" role="tablist" aria-label="Glass looks"></div>
+  </div>
+  <noscript><p class="small">Turn on JavaScript to see the live glass demo.</p></noscript>
 
   <section id="features">
     <h2>Real glass, not a blur</h2>
@@ -153,6 +169,17 @@
       </table>
     </div>
     <p class="small">All files are on the <a href="https://github.com/CGSudo/liquid-glass-for-adobe/releases/latest">latest release</a>. Tested on Windows; the Photoshop plugin should run on macOS but hasn't been tested on a Mac yet.</p>
+    <div class="shot glass"><img src="setup.png" width="920" height="600" loading="lazy" alt="Liquid Glass for Adobe Setup for Windows: a glass window with a live tour of the looks and one Install button"></div>
+  </section>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <div class="grid">
+      <div class="card glass"><h3>1 · Your shape</h3><p>Any shape, path or text. It stays editable: the plugin never merges or flattens it.</p></div>
+      <div class="card glass"><h3>2 · Read what's behind</h3><p>The plugin reads the artwork under the shape without changing your document.</p></div>
+      <div class="card glass"><h3>3 · Bend the light</h3><p>The shape becomes a curved glass surface; light refracts through it with dispersion, frost and rim highlights.</p></div>
+      <div class="card glass"><h3>4 · Stay live</h3><p>Move anything and the glass renders again, exactly like the demo above.</p></div>
+    </div>
   </section>
 
   <section id="faq">
@@ -163,6 +190,33 @@
     <details class="glass"><summary>Is it free? Does it work on Mac?</summary><p>Free and open source (MIT). The Photoshop plugin runs on Windows and macOS; the Illustrator plug-in is Windows only for now.</p></details>
     <details class="glass"><summary>Is it made by Adobe or Apple?</summary><p>No. Liquid Glass for Adobe is an independent project by CGSudo.</p></details>
   </section>
+
+  <script src="looks.js"></script>
+  <script src="stage.js"></script>
+  <script>
+    // Live demo: the same stage as the Windows Setup; cycles through the looks until someone picks one.
+    (function () {
+      const { LOOKS } = window.SudoLooks;
+      const stage = createStage(document.getElementById("stage"), { width: 640, height: 360 }); // CSS scales it up; keeps ~15 fps
+      const bar = document.getElementById("looks");
+      let auto = true;
+      const pick = (i) => {
+        stage.setLook(i);
+        [...bar.children].forEach((b, k) => b.setAttribute("aria-selected", String(k === i)));
+      };
+      LOOKS.forEach((l, i) => {
+        const b = document.createElement("button");
+        b.textContent = l.name;
+        b.setAttribute("role", "tab");
+        b.onclick = () => ((auto = false), pick(i));
+        bar.append(b);
+      });
+      pick(0);
+      setInterval(() => auto && pick((stage.look + 1) % LOOKS.length), 3500);
+      // Render only while the demo is on screen.
+      new IntersectionObserver(([e]) => (e.isIntersecting ? stage.start() : stage.stop())).observe(document.getElementById("demo"));
+    })();
+  </script>
 
   <footer>
     Made by <a href="https://www.linkedin.com/in/cgsudo">CGSudo</a> · <a href="https://github.com/CGSudo/liquid-glass-for-adobe">Source on GitHub</a> · MIT licence<br>

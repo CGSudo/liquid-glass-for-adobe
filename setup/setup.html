@@ -99,8 +99,8 @@
 </head>
 <body>
 <div class="stage" id="stage">
-  <canvas id="view" aria-label="Live preview of the selected glass look"></canvas>
-  <div class="tag"><b></b>Live engine render</div>
+  <canvas id="view" aria-label="Live preview of the selected glass look. Drag to move the glass."></canvas>
+  <div class="tag"><b></b>Live engine render · drag me</div>
   <div class="caption glass">
     <button class="nav" id="prev" aria-label="Previous look"><svg class="i" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
     <div class="txt" id="txt"><h3 id="lookName">Liquid Glass</h3><p id="lookText"></p></div>
@@ -143,12 +143,13 @@
 </div>
 
 <script src="looks.js"></script>
+<script src="stage.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
 const host = window.chrome && window.chrome.webview;
 const send = (m) => host && host.postMessage(m);
-const { LOOKS, KEEP } = window.SudoLooks;
+const { LOOKS } = window.SudoLooks;
 
 // One line per look, in the order of looks.js.
 const ABOUT = {
@@ -163,78 +164,16 @@ const ABOUT = {
   "Film frost": "Frosted glass with fine film grain.",
 };
 
-// ---- Live preview: scene + glass shapes drawn here, glass rendered by the engine in a worker. ----
-const cv = $("view"), ctx = cv.getContext("2d", { willReadFrequently: true });
-const W = 470, H = 528;
-cv.width = W; cv.height = H;
-const scene = new OffscreenCanvas(W, H), sx = scene.getContext("2d", { willReadFrequently: true });
-const shape = new OffscreenCanvas(W, H), mx = shape.getContext("2d", { willReadFrequently: true });
-const worker = new Worker("setup-worker.js");
-const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-let look = 0, busy = false, t0 = performance.now();
-
-function drawScene(t) {
-  const g = sx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, "#0b1a2e"); g.addColorStop(1, "#1a0f2e");
-  sx.fillStyle = g; sx.fillRect(0, 0, W, H);
-  const blobs = [["#ff5f6d", 0.0, 150], ["#ffc371", 1.7, 120], ["#36d1dc", 3.1, 140], ["#7b5cff", 4.6, 160]];
-  for (const [c, ph, r] of blobs) {
-    const x = W / 2 + Math.cos(t * 0.35 + ph) * 150, y = H / 2 + Math.sin(t * 0.27 + ph * 1.3) * 170;
-    const rg = sx.createRadialGradient(x, y, 0, x, y, r);
-    rg.addColorStop(0, c); rg.addColorStop(1, "transparent");
-    sx.fillStyle = rg; sx.fillRect(0, 0, W, H);
-  }
-  sx.strokeStyle = "rgba(255,255,255,0.10)"; sx.lineWidth = 1;
-  for (let x = 0.5; x < W; x += 24) { sx.beginPath(); sx.moveTo(x, 0); sx.lineTo(x, H); sx.stroke(); }
-  sx.fillStyle = "rgba(255,255,255,0.88)"; sx.font = "800 64px 'Segoe UI', sans-serif"; sx.textAlign = "center";
-  sx.fillText("Liquid", W / 2, H / 2 - 18); sx.fillText("Glass", W / 2, H / 2 + 50);
-}
-
-// Two shapes that drift and melt into each other (the engine's liquid merge).
-function drawMasks(t) {
-  const planes = [];
-  const pill = () => {
-    const w = 300, h = 150, x = W / 2 - w / 2 + Math.sin(t * 0.5) * 30, y = H / 2 - h / 2 - 20 + Math.cos(t * 0.4) * 24;
-    mx.beginPath(); mx.roundRect(x, y, w, h, 75); mx.fill();
-  };
-  const dot = () => {
-    const a = t * 0.6, x = W / 2 + Math.cos(a) * 150, y = H / 2 + 95 + Math.sin(a) * 40;
-    mx.beginPath(); mx.arc(x, y, 52, 0, Math.PI * 2); mx.fill();
-  };
-  for (const draw of [pill, dot]) {
-    mx.clearRect(0, 0, W, H); mx.fillStyle = "#fff"; draw();
-    const px = mx.getImageData(0, 0, W, H).data, m = new Uint8Array(W * H);
-    for (let i = 0; i < m.length; i++) m[i] = px[i * 4 + 3];
-    planes.push(m);
-  }
-  const all = new Uint8Array(planes.length * W * H);
-  planes.forEach((p, i) => all.set(p, i * W * H));
-  return all;
-}
-
-function frame() {
-  if (busy) return;
-  busy = true;
-  const t = reduced ? 0 : (performance.now() - t0) / 1000;
-  drawScene(t);
-  const backdrop = new Uint8Array(sx.getImageData(0, 0, W, H).data.buffer);
-  const masks = drawMasks(t);
-  const params = LOOKS[look].values.slice();
-  params[KEEP[0]] = 34; // edge width sized for these shapes, as Make Glass does
-  worker.postMessage({ id: look, params, backdrop, masks, w: W, h: H }, [backdrop.buffer, masks.buffer]);
-}
-worker.onmessage = ({ data }) => {
-  ctx.putImageData(new ImageData(data.rgba, W, H), 0, 0);
-  busy = false;
-  if (!reduced || !rendered++) requestAnimationFrame(frame);
-};
-let rendered = 0;
+// ---- Live preview: the shared stage (stage.js), real engine in a worker. Drag to move the glass. ----
+const stage = createStage($("view"), { width: 470, height: 528 });
+let look = 0;
 
 // ---- Tour: every look in turn; arrows, keys and hover pause it. ----
 const DWELL = 4200;
 let shownAt = performance.now(), paused = false;
 function show(i) {
   look = (i + LOOKS.length) % LOOKS.length;
+  stage.setLook(look);
   $("txt").classList.add("out");
   setTimeout(() => {
     $("lookName").textContent = LOOKS[look].name;
@@ -243,7 +182,6 @@ function show(i) {
     $("txt").classList.remove("out");
   }, 180);
   shownAt = performance.now();
-  if (reduced) { rendered = 0; frame(); }
 }
 $("prev").onclick = () => show(look - 1);
 $("next").onclick = () => show(look + 1);
@@ -324,7 +262,7 @@ if (host) {
   $("go").onclick = () => $("hint").textContent = "Demo mode: open Setup.exe to install.";
 }
 show(0);
-frame();
+stage.start();
 </script>
 </body>
 </html>

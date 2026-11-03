@@ -24,7 +24,7 @@ $bw.Write([uint16]1); $bw.Write([uint16]32); $bw.Write([uint32]$png.Length); $bw
 [IO.File]::WriteAllBytes((Join-Path $obj "icon.ico"), $ico.ToArray())
 
 # Payload: RCDATA 101, 102, … in the order of the file list in setup.cpp's Extract().
-$files = "setup\setup.html", "setup\setup-worker.js", "photoshop\looks.js", "photoshop\engine.js", "photoshop\glass_core.wasm",
+$files = "setup\setup.html", "setup\glass-worker.js", "setup\stage.js", "photoshop\looks.js", "photoshop\engine.js", "photoshop\glass_core.wasm",
     "photoshop\logo.png", "dist\LiquidGlass-for-Adobe.ccx", "dist\LiquidGlass.aip"
 $rc = "1 ICON `"$((Join-Path $obj 'icon.ico') -replace '\\', '\\')`"`n"
 $id = 101

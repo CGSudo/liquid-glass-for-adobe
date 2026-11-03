@@ -2,7 +2,7 @@
 
 **Liquid Glass for Adobe** (by CGSudo; called Sudo Liquid Glass before 0.7.2) recreates Apple's Liquid Glass material inside Adobe apps. It is live and non-destructive: the glass reads what is behind it and re-renders, and it never merges or flattens layers.
 
-- **Today (v0.7.2):**
+- **Today (v0.7.3):**
   - **Photoshop:** a UXP plugin, Windows and macOS (wasm engine, no platform code; tested on Windows only).
   - **Illustrator:** a native Live Effect (`.aip`), **Windows only**.
 - **Goal:** the same engine in **Premiere Pro and After Effects**, and Illustrator on Mac. These are plans: never describe them as available.
@@ -34,8 +34,11 @@ preview/src/main.rs      renders preview*.png from a synthetic backdrop (engine 
 illustrator/             native Live Effect: Source/*.cpp (render, notifier, menus, checks), ui/panel.html (settings
                          window, WebView2), build.ps1, test/run_test.ps1 (settings window without Illustrator)
 setup/                   Windows Setup.exe: setup.cpp (Win32 + WebView2 on an acrylic window; installs via UPIA and an elevated
-                         --copy-aip of itself; --silent for IT), setup.html (live looks tour), setup-worker.js, build.ps1
-docs/                    GitHub Pages site (index.html with SEO meta + JSON-LD, sitemap, robots, llms.txt) + PROJECT_HISTORY.md
+                         --copy-aip of itself; --silent for IT), setup.html (looks tour), build.ps1;
+                         stage.js + glass-worker.js = the live engine demo, shared with the website
+docs/                    GitHub Pages site (index.html: live demo, SEO meta + JSON-LD; sitemap, robots, llms.txt), explainer.webp
+                         (README animation), PROJECT_HISTORY.md. Pages serves only docs/, so it holds copies of the engine and
+                         stage files: docs/assets.test.js (in npm test) fails when they're stale; --sync refreshes them
 release.ps1              builds every release download into dist/release (AIO, per-app, per-app source)
 install.ps1 / install.sh package photoshop/ → dist/LiquidGlass-for-Adobe.ccx and install via Adobe UPIA (Windows / macOS)
 package.json             dev tooling only: `npm install` (jsdom), then `npm test` runs every test
@@ -48,12 +51,12 @@ package.json             dev tooling only: `npm install` (jsdom), then `npm test
 
 | # | field | default | # | field | default |
 |---|---|---|---|---|---|
-| 0 | light_angle (deg, 0 = top) | -45 | 13 | shadow_opacity | 0.25 |
-| 1 | light_intensity ("Shine") | 0.6 | 14 | shadow_blur (px) | 24 |
+| 0 | light_angle (deg, 0 = top) | -45 | 13 | shadow_opacity (0 = off) | 0 |
+| 1 | light_intensity ("Shine") | 0.75 | 14 | shadow_blur (px) | 24 |
 | 2 | refraction ("Lens strength") | 80 | 15 | shadow_offset_y (px) | 8 |
 | 3 | depth ("Edge width", px) | 16 | 16 | grain (0 = off) | 0 |
 | 4 | dispersion ("Dispersion", rainbow) | 20 | 17 | grain_size (px) | 1.5 |
-| 5 | frost ("Frost", px; blur radius = half) | 12 | 18 | dim (0 = off) | 0 |
+| 5 | frost ("Frost", px; blur radius = half; Make Glass scales it per 200 px of shape) | 3 | 18 | dim (0 = off) | 0 |
 | 6 | splay ("Edge softness") | 30 | 19 | dim_spread (px) | 40 |
 | 7 | brightness | 0.06 | 20 | merge (px) | 24 |
 | 8 | saturation ("Vividness") | 1.2 | 21 | bevel ("Emboss", advanced) | 0.32 |
