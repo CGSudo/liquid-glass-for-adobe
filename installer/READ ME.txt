@@ -1,24 +1,23 @@
 Sudo Liquid Glass - live, real Liquid Glass for Photoshop and Illustrator.
 
-PHOTOSHOP (Windows and Mac) - pick one
-  1. Double-click SudoLiquidGlass.ccx. Creative Cloud installs it.
-  2. Windows: double-click "Install Photoshop on Windows.bat".
-     Mac: double-click "Install Photoshop on Mac.command". If macOS says it can't be opened,
-     right-click it > Open > Open (it is a small script, not signed by Apple).
-  Then restart Photoshop and open Plugins > Sudo Liquid Glass.
-  Needs Photoshop 2023 (v24.2) or newer and the Creative Cloud desktop app.
+ONE INSTALLER FOR BOTH APPS
+  Windows: close Photoshop and Illustrator, then double-click "Install on Windows.bat".
+    It installs into every Photoshop and Illustrator it finds. Allow it when Windows asks for
+    admin rights (needed for Illustrator's Plug-ins folder).
+  Mac: double-click "Install on Mac.command" (Photoshop; there is no Mac Illustrator version yet).
+    If macOS says it can't be opened, right-click it > Open > Open (it is a small script, not signed by Apple).
 
-ILLUSTRATOR (Windows only for now)
-  1. Close Illustrator.
-  2. Double-click "Install Illustrator on Windows.bat" and allow it to make changes
-     (it copies LiquidGlass.aip into Illustrator's Plug-ins folder).
-  3. Start Illustrator, select a shape and choose Effect > Stylize > Liquid Glass...
-     Change it later: double-click Liquid Glass in the Appearance panel, or Object > Edit Liquid Glass...
-  Needs Illustrator 2026 on Windows 10 or 11 (with the Microsoft Edge WebView2 Runtime, built into Windows 11).
-  There is no Mac Illustrator version yet.
+THEN
+  Photoshop: restart it and open Plugins > Sudo Liquid Glass.
+  Illustrator: select a shape and choose Effect > Stylize > Liquid Glass...
+    Change it later: double-click Liquid Glass in the Appearance panel, or Object > Edit Liquid Glass...
 
-Why .ccx and not .zxp? ZXP is the format of Adobe's older CEP extensions.
-The Photoshop plugin is a modern UXP plugin; Adobe packages those as .ccx.
+NEEDS
+  Photoshop 2023 (v24.2) or newer and the Creative Cloud desktop app.
+  Illustrator 2026 on Windows 10 or 11 (with the Microsoft Edge WebView2 Runtime, built into Windows 11).
+
+Inside: SudoLiquidGlass.ccx is the Photoshop plugin (you can also double-click it),
+LiquidGlass.aip is the Illustrator plug-in. Both use the same glass engine and settings.
 
 Help, updates and source: https://github.com/CGSudo/sudo-liquid-glass
 Made by CGSudo - https://www.linkedin.com/in/cgsudo

@@ -245,6 +245,7 @@ The owner confirmed: **"All working"** (v0.5.5).
   - The Photoshop panel copies the Illustrator window: green header with logo and version, card sections, tab bar, help bar, footer with Refresh, Live and Make Glass.
   - Changed settings show a green dot; double-clicking a setting's name resets it.
   - The live preview was removed.
+- **"One plugin for both Illustrator and Photoshop."** The two apps can't load the same file (Photoshop takes a UXP `.ccx`, Illustrator a native `.aip`), so the release became **one zip** with **one installer per OS**: `Install on Windows.bat` installs into every Photoshop (Adobe UPIA, as the user) and Illustrator (copies the `.aip`, one admin prompt) it finds. `Install on Mac.command` covers Photoshop.
 
 ## 4. Fundamentals installed on the dev machine (Windows 11)
 

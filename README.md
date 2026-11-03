@@ -11,8 +11,9 @@ You know the routine. Merge a copy of the background, blur it, clip it to a shap
 ![Sudo Liquid Glass: engine test render](preview_liquid.png)
 
 **Download:** [latest release](../../releases/latest)
-- **Photoshop** 2023 (v24.2) or newer: `SudoLiquidGlass.ccx`, Windows and macOS (Intel and Apple Silicon).
-- **Illustrator** 2026 on Windows: `LiquidGlass.aip` inside the installer zip.
+One download, `SudoLiquidGlass-<version>.zip`, for both apps:
+- **Photoshop** 2023 (v24.2) or newer, Windows and macOS (Intel and Apple Silicon).
+- **Illustrator** 2026 on Windows.
 
 > **Honest status:**
 > - Photoshop and Illustrator are tested on Windows.
@@ -43,17 +44,13 @@ You know the routine. Merge a copy of the background, blur it, clip it to a shap
 - **Fast:** the renderer is written in **Rust** (WebAssembly in Photoshop, native in Illustrator).
 
 ## Install
-**Photoshop (Windows and macOS):**
-1. Download `SudoLiquidGlass.ccx` from the [latest release](../../releases/latest).
-2. Double-click it. The Creative Cloud desktop app installs the plugin.
-3. Restart Photoshop and open **Plugins › Sudo Liquid Glass**.
+1. Download `SudoLiquidGlass-<version>.zip` from the [latest release](../../releases/latest) and unzip it.
+2. Close Photoshop and Illustrator.
+3. **Windows:** double-click **`Install on Windows.bat`**. It installs into every Photoshop and Illustrator it finds; allow it when Windows asks for admin rights (Illustrator's Plug-ins folder needs them).
+   **Mac:** double-click **`Install on Mac.command`** (Photoshop; if macOS blocks it, right-click › Open).
+4. **Photoshop:** open **Plugins › Sudo Liquid Glass**. **Illustrator:** select a shape and choose **Effect › Stylize › Liquid Glass…**.
 
-**Illustrator (Windows):**
-1. Download `SudoLiquidGlass-…-installer.zip` from the [latest release](../../releases/latest) and unzip it.
-2. Close Illustrator, then double-click **`Install Illustrator on Windows.bat`** and allow it to make changes.
-3. Start Illustrator, select a shape and choose **Effect › Stylize › Liquid Glass…**.
-
-The same zip has one-click Photoshop installers too: `Install Photoshop on Windows.bat` and `Install Photoshop on Mac.command` (if macOS blocks it, right-click › Open).
+The zip also holds the plugins themselves: `SudoLiquidGlass.ccx` (Photoshop, can be double-clicked) and `LiquidGlass.aip` (Illustrator).
 
 **Why `.ccx` and not `.zxp`?** ZXP is the package format for Adobe's older CEP extensions. The Photoshop plugin is a modern UXP plugin, and Adobe packages those as `.ccx`, the same format its own plugin marketplace uses. The Illustrator plugin is a native `.aip` plug-in.
 
@@ -98,7 +95,7 @@ core/        Rust renderer (glass_core): backdrop + shape masks → glass layer 
 photoshop/   UXP plugin: panel, live updates, vector and text outline reader, WebAssembly bridge;
              looks.js (defaults, looks and icons) is shared with Illustrator
 illustrator/ native Live Effect (C++, Illustrator SDK) with a WebView2 settings window
-installer/   one-click installers shipped in the release zip
+installer/   the one-click installers (Windows: both apps; Mac: Photoshop) shipped in the release zip
 preview/     renders the preview images from test shapes
 docs/        full project history and handoff notes
 ```
