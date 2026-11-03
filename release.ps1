@@ -63,7 +63,7 @@ Not affiliated with Adobe or Apple. Adobe, Photoshop and Illustrator are tradema
     New-Item -ItemType Directory -Force $ai | Out-Null
     Copy-Item (Join-Path $root "dist\LiquidGlass.aip") $ai
     Text (Join-Path $ai "READ ME.txt") @"
-Liquid Glass for Adobe $ver: the Illustrator plug-in (Windows, Illustrator 2026)
+Liquid Glass for Adobe ${ver}: the Illustrator plug-in (Windows, Illustrator 2026)
 
 Easiest: use $setup instead; it installs this for you.
 
