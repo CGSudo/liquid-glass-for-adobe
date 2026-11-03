@@ -2,130 +2,159 @@
 <html>
 <head>
   <style>
-    /* Theme comes from Photoshop (light or dark); the accent is SUDO green. Translucent greys work on both.
-       Sizes are compact (11px type, 22px rows) and every row is one line, so the panel works narrow or wide. */
+    /* Same look as the Illustrator settings window (illustrator/ui/panel.html): dark panel, SUDO green header,
+       cards with a hairline edge, help bar and footer. UXP subset only: flexbox, radius, rgba, linear-gradient. */
     html, body { height: 100%; margin: 0; }
     body {
-      display: flex; flex-direction: column; height: 100vh; font-size: 11px;
-      font-family: "Segoe UI", -apple-system, "Helvetica Neue", sans-serif;
-      color: var(--uxp-host-text-color, #e6e6e6); background-color: var(--uxp-host-background-color, #2b2b2b);
+      display: flex; flex-direction: column; height: 100vh; font-size: 12px;
+      font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, "Helvetica Neue", sans-serif;
+      color: #e9efec; background-color: #1b1d1c;
     }
-    .muted { color: var(--uxp-host-text-color-secondary, #a0a0a0); }
+    .muted { color: #9aa6a0; }
     .grow { flex: 1; }
-    .link { cursor: pointer; color: var(--uxp-host-link-text-color, #8fb8ff); }
+    .link { cursor: pointer; color: #2fae7c; font-size: 11px; }
+    .link:hover { color: #45c891; }
 
-    #top { flex: none; padding: 8px 10px 0; }
-    .brand { display: flex; align-items: center; gap: 8px; }
-    #brandLink {
-      flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; cursor: pointer;
-      padding: 5px 8px 5px 5px; border-radius: 8px; background-color: rgba(127, 127, 127, 0.1);
+    /* Header: brand green, logo, name, version pill, About. */
+    .hdr {
+      flex: none; display: flex; align-items: center; gap: 10px; height: 58px; padding: 0 12px 0 14px;
+      background-color: #0d4431; background-image: linear-gradient(135deg, #17694c 0%, #0d4431 55%, #08281d 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
+    #brandLink { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
     .mark {
-      width: 26px; height: 26px; border-radius: 6px; flex: none; overflow: hidden;
-      background-color: #0d4431; color: #fff; font-weight: bold; font-size: 13px; text-align: center; line-height: 26px;
+      width: 34px; height: 34px; border-radius: 9px; flex: none; overflow: hidden;
+      background-color: #08281d; color: #fff; font-weight: bold; font-size: 15px; text-align: center; line-height: 34px;
     }
-    .mark img { width: 26px; height: 26px; }
+    .mark img { width: 34px; height: 34px; }
     .name, .tagline { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .name { font-size: 12px; font-weight: bold; }
-    .tagline { font-size: 10px; }
+    .name { font-size: 14px; font-weight: bold; }
+    .tagline { font-size: 11px; color: #b7e6d1; }
+    #brandLink:hover .tagline { color: #fff; }
+    .ver { flex: none; font-size: 10px; color: #a6d9c2; background-color: rgba(0, 0, 0, 0.25); padding: 2px 7px; border-radius: 9px; }
     .iconbtn {
-      flex: none; width: 24px; height: 24px; border-radius: 12px; text-align: center; line-height: 24px; cursor: pointer;
-      background-color: rgba(127, 127, 127, 0.1); font-weight: bold;
+      flex: none; width: 24px; height: 24px; border-radius: 12px; text-align: center; line-height: 22px; cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.18); color: #d7efe4; font-weight: bold; font-size: 11px;
     }
-    .actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-    #make { flex: 1; }
-    .bar { display: flex; align-items: center; gap: 8px; margin-top: 5px; font-size: 10px; }
-    /* Fixed height: hover explanations replace the status text without making the panel jump. */
-    .status {
-      margin: 6px 0; padding: 4px 8px; border-radius: 6px; height: 38px; overflow: hidden; line-height: 13px;
-      background-color: rgba(127, 127, 127, 0.1); border-left: 2px solid rgba(127, 127, 127, 0.3);
-    }
-    .status.tip { border-left-color: #2fae7c; }
-    .preview { position: relative; margin-top: 6px; border-radius: 7px; overflow: hidden; background-color: rgba(127, 127, 127, 0.1); }
-    .preview img { display: block; max-width: 100%; max-height: 130px; margin: 0 auto; }
-    .ptag { position: absolute; left: 6px; top: 4px; padding: 1px 5px; border-radius: 3px; font-size: 9px; color: #fff; background-color: rgba(0, 0, 0, 0.5); }
+    .iconbtn:hover { background-color: rgba(0, 0, 0, 0.25); }
 
     /* Looks: four cards a page, arrows and dots; no scrollbar. */
-    .looksHead { display: flex; align-items: center; height: 18px; margin-top: 6px; }
-    .looks { display: flex; align-items: center; gap: 2px; }
-    .strip { flex: 1; min-width: 0; display: flex; gap: 5px; overflow: hidden; }
-    .pg { flex: none; width: 16px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 5px; }
-    .card { position: relative; flex: 1 1 0; min-width: 0; flex-direction: column; align-items: center; padding: 3px 3px 2px; border-radius: 7px;
-      cursor: pointer; border: 1px solid rgba(127, 127, 127, 0.18); background-color: rgba(127, 127, 127, 0.06); }
+    .presets { flex: none; padding: 10px 14px 0; }
+    .looksHead { display: flex; align-items: center; height: 20px; margin-bottom: 6px; }
+    .stitle {
+      flex: 1; display: flex; align-items: center; font-weight: bold; text-transform: uppercase; font-size: 10px;
+      letter-spacing: 1px; color: #9aa6a0;
+    }
+    .looks { display: flex; align-items: center; gap: 4px; }
+    .strip { flex: 1; min-width: 0; display: flex; gap: 6px; overflow: hidden; padding: 1px; }
+    .pg { flex: none; width: 20px; height: 70px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 8px; }
+    .pg:hover { background-color: #2e3230; }
+    .card {
+      position: relative; flex: 1 1 0; min-width: 0; flex-direction: column; align-items: center; padding: 5px 5px 0; height: 70px;
+      box-sizing: border-box; border-radius: 10px; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.07); background-color: #242726;
+    }
+    .card:hover { border-color: rgba(47, 174, 124, 0.6); background-color: #2e3230; }
     .card.on { border-color: #2fae7c; background-color: rgba(47, 174, 124, 0.12); }
-    .thumb { width: 100%; height: 32px; border-radius: 5px; overflow: hidden; background-color: rgba(127, 127, 127, 0.15); }
-    .thumb img { width: 100%; height: 32px; }
+    .thumb { width: 100%; height: 40px; border-radius: 7px; overflow: hidden; background-color: #171918; }
+    .thumb img { width: 100%; height: 40px; }
     .thumb.plus { display: flex; align-items: center; justify-content: center; }
-    .cname { font-size: 9px; margin-top: 2px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .card .x { position: absolute; right: 1px; top: 1px; width: 13px; height: 13px; line-height: 12px; text-align: center; border-radius: 7px;
-      font-size: 10px; color: #fff; background-color: rgba(0, 0, 0, 0.55); }
-    .dots { display: flex; justify-content: center; gap: 4px; height: 7px; margin-top: 2px; }
-    .dot { width: 4px; height: 4px; border-radius: 2px; background-color: rgba(127, 127, 127, 0.4); }
+    .cname { font-size: 10px; margin-top: 4px; max-width: 100%; color: #9aa6a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+    .card.on .cname { color: #e9efec; }
+    .card .x {
+      position: absolute; right: 3px; top: 3px; width: 15px; height: 15px; line-height: 14px; text-align: center; border-radius: 8px;
+      font-size: 11px; color: #ffb3b3; background-color: rgba(20, 20, 20, 0.75);
+    }
+    .dots { display: flex; justify-content: center; gap: 5px; height: 8px; margin-top: 4px; }
+    .dot { width: 5px; height: 5px; border-radius: 3px; background-color: #3c4240; }
     .dot.on { background-color: #2fae7c; }
-    .saveBox { display: none; gap: 5px; align-items: center; margin-top: 4px; }
+    .saveBox {
+      display: none; gap: 6px; align-items: center; margin-top: 6px; padding: 6px 8px; border-radius: 10px;
+      background-color: #2e3230; border: 1px solid #2fae7c;
+    }
     .saveBox input { flex: 1; min-width: 0; }
-    #quick { margin: 4px 0 6px; padding: 2px 8px; border-radius: 7px; background-color: rgba(127, 127, 127, 0.08); }
-    .ico { flex: none; display: inline-flex; width: 14px; height: 14px; margin-right: 5px; vertical-align: middle; }
-    .tabs { display: flex; padding: 2px; border-radius: 6px; background-color: rgba(127, 127, 127, 0.14); }
-    .tab { flex: 1; display: flex; align-items: center; justify-content: center; padding: 4px 0; border-radius: 4px; cursor: pointer; opacity: 0.65; }
-    .tab.on { opacity: 1; font-weight: bold; background-color: var(--uxp-host-background-color, #2b2b2b); color: #2fae7c; }
 
-    /* Only the controls scroll. */
-    #params, #about { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 0 10px 8px; }
-    .section { margin-top: 6px; padding: 5px 8px 7px; border-radius: 7px; background-color: rgba(127, 127, 127, 0.08); }
-    .shead { display: flex; align-items: center; height: 18px; }
-    .arrow { width: 12px; text-align: right; opacity: 0.7; }
-    .shead .ico { margin-right: 4px; }
-    .stitle { flex: 1; display: flex; align-items: center; font-weight: bold; text-transform: uppercase; font-size: 9px; letter-spacing: 1px; opacity: 0.75; }
-    .param { display: flex; align-items: center; gap: 6px; height: 24px; }
-    .label { flex: 0 0 38%; max-width: 116px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; cursor: help; }
+    /* Quick adjust, tabs and every settings section share one card style. */
+    #quick, .section { padding: 6px 11px 6px; border-radius: 11px; background-color: #242726; border: 1px solid rgba(255, 255, 255, 0.07); }
+    #quick { flex: none; margin: 4px 14px 0; }
+    .tabs { flex: none; display: flex; height: 34px; box-sizing: border-box; margin: 8px 14px 0; padding: 3px; border-radius: 9px; background-color: #242726; }
+    .tab {
+      flex: 1; display: flex; align-items: center; justify-content: center; border-radius: 7px; cursor: pointer;
+      color: #9aa6a0; font-weight: bold;
+    }
+    .tab:hover { color: #e9efec; }
+    .tab.on { background-color: #2e3230; color: #e9efec; }
+
+    /* Only the settings scroll. */
+    #params, #about { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 9px 14px 12px; }
+    .section { margin-bottom: 8px; }
+    .shead { display: flex; align-items: center; gap: 8px; height: 22px; margin-bottom: 4px; }
+    .arrow { width: 14px; text-align: right; color: #9aa6a0; }
+    .ico { flex: none; display: inline-flex; width: 14px; height: 14px; margin-right: 7px; }
+    .shead .ico { margin-right: 0; }
+    .param { display: flex; align-items: center; gap: 8px; height: 30px; }
+    .label { flex: none; width: 118px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; cursor: help; color: #9aa6a0; }
+    .param:hover .label { color: #e9efec; }
+    /* Changed from the default: brighter name and a green dot. Double-click the name to reset it. */
+    .mod { flex: none; width: 5px; height: 5px; border-radius: 3px; margin-left: 5px; }
+    .param.changed .label { color: #e9efec; }
+    .param.changed .mod { background-color: #2fae7c; }
     /* Range inputs have a built-in width; basis 0 lets them shrink so the number box never falls off a narrow panel. */
     .slider { flex: 1 1 0; width: 0; min-width: 30px; margin: 0; }
     .num, .hex {
-      flex: none; width: 46px; height: 20px; padding: 0 5px; box-sizing: border-box; text-align: right; font-size: 11px;
-      border-radius: 4px; border: 1px solid rgba(127, 127, 127, 0.35); background-color: rgba(0, 0, 0, 0.12);
-      color: var(--uxp-host-text-color, #e6e6e6);
+      flex: none; width: 52px; height: 22px; padding: 0 6px; box-sizing: border-box; text-align: right; font-size: 12px;
+      border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.07); background-color: #171918; color: #e9efec;
     }
-    .hex { width: 72px; text-align: left; }
+    .num:focus, .hex:focus { border-color: #2fae7c; }
+    .hex { width: 74px; text-align: left; }
     .pick { flex: 1; min-width: 0; }
     .tintbox { flex: 1; display: flex; gap: 6px; align-items: center; }
-    .swatch { flex: none; width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(127, 127, 127, 0.4); }
-    .dial { flex: none; position: relative; width: 26px; height: 26px; border-radius: 14px; border: 1px solid #2fae7c; cursor: pointer; }
-    .knob { position: absolute; width: 6px; height: 6px; border-radius: 3px; background-color: #2fae7c; }
+    .swatch { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.12); }
+    .dial { flex: none; position: relative; width: 28px; height: 28px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.07); cursor: pointer; background-color: #171918; }
+    .knob { position: absolute; width: 6px; height: 6px; border-radius: 3px; background-color: #45c891; }
     .wide { width: 100%; margin-top: 4px; }
     input[type="checkbox"] { margin: 0; }
 
-    .about-card { margin-top: 8px; padding: 14px 10px; border-radius: 8px; text-align: center; background-color: rgba(127, 127, 127, 0.08); }
+    .about-card { padding: 16px 12px; border-radius: 11px; text-align: center; background-color: #242726; border: 1px solid rgba(255, 255, 255, 0.07); }
     .about-card .mark { margin: 0 auto 8px; width: 52px; height: 52px; border-radius: 12px; line-height: 52px; font-size: 22px; }
     .about-card .mark img { width: 52px; height: 52px; }
-    .about-card p { margin: 6px 0; line-height: 15px; }
-    .links { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+    .about-card p { margin: 6px 0; line-height: 16px; }
+    .links { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 
-    .foot { flex: none; display: flex; align-items: center; padding: 4px 10px; font-size: 10px; border-top: 1px solid rgba(127, 127, 127, 0.2); }
+    /* Help bar: two lines, fixed height, so hovering a setting never moves the buttons below. */
+    .help {
+      flex: none; display: flex; gap: 8px; align-items: flex-start; height: 46px; box-sizing: border-box; padding: 7px 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07); background-color: #171918; font-size: 11px; color: #9aa6a0;
+    }
+    .help .ico { margin: 1px 0 0; }
+    .status { overflow: hidden; line-height: 15px; height: 30px; }
+    .status.tip { color: #e9efec; }
+    .foot {
+      flex: none; display: flex; align-items: center; gap: 8px; height: 52px; box-sizing: border-box; padding: 0 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07); background-color: #242726;
+    }
+    .btn {
+      display: flex; align-items: center; height: 30px; box-sizing: border-box; padding: 0 12px; border-radius: 8px; cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.07); background-color: #2e3230; white-space: nowrap;
+    }
+    .btn:hover { border-color: rgba(255, 255, 255, 0.2); }
+    .btn.primary { justify-content: center; background-color: #2fae7c; border-color: #2fae7c; color: #062418; font-weight: bold; }
+    .btn.primary:hover { background-color: #45c891; }
+    .check { display: flex; align-items: center; gap: 6px; color: #9aa6a0; }
   </style>
 </head>
 <body>
-  <div id="top">
-    <div class="brand">
-      <div id="brandLink">
-        <div class="mark" id="mark">S</div>
-        <div style="min-width: 0; flex: 1; overflow: hidden">
-          <div class="name">Sudo Liquid Glass</div>
-          <div class="tagline muted">by CGSudo · LinkedIn ↗</div>
-        </div>
+  <div class="hdr">
+    <div id="brandLink">
+      <div class="mark" id="mark">S</div>
+      <div style="min-width: 0; flex: 1; overflow: hidden">
+        <div class="name">Sudo Liquid Glass</div>
+        <div class="tagline">by CGSudo · LinkedIn ↗</div>
       </div>
-      <div class="iconbtn" id="infoBtn">i</div>
     </div>
-    <div class="actions">
-      <sp-button id="make" variant="cta" size="m">Make Glass</sp-button>
-    </div>
-    <div class="bar">
-      <span class="link" id="refresh">↻ Refresh</span>
-      <span class="grow"></span>
-      <label id="liveBox"><input type="checkbox" id="live" checked> Live updates</label>
-    </div>
-    <div class="preview" id="previewBox" style="display: none"><img id="preview" alt=""><span class="ptag">Preview</span></div>
-    <div class="status" id="status">Select shape layers, then click Make Glass. Hover any setting to see what it does.</div>
+    <span class="ver" id="footVersion"></span>
+    <div class="iconbtn" id="infoBtn">i</div>
+  </div>
+  <div class="presets" id="presets">
     <div class="looksHead">
       <span class="stitle" id="looksTitle">Looks</span>
       <span class="link" id="resetLook">Reset</span>
@@ -141,9 +170,9 @@
       <sp-button id="saveOk" size="s" variant="cta">Save</sp-button>
       <sp-button id="saveNo" size="s" variant="secondary">Cancel</sp-button>
     </div>
-    <div id="quick"></div>
-    <div class="tabs" id="tabs"></div>
   </div>
+  <div id="quick"></div>
+  <div class="tabs" id="tabs"></div>
   <div id="params"></div>
   <div id="about" style="display: none">
     <div class="about-card">
@@ -161,10 +190,12 @@
     <p class="muted" style="text-align: center">Free and open source (MIT). Not affiliated with Apple or Adobe.</p>
     <div style="text-align: center"><span class="link" id="back">← Back to settings</span></div>
   </div>
-  <div class="foot muted">
-    <span id="footVersion"></span>
+  <div class="help"><span class="ico" id="helpIcon"></span><span class="status" id="status">Select shape layers, then click Make Glass. Hover any setting to see what it does.</span></div>
+  <div class="foot">
+    <div class="btn" id="refresh">Refresh</div>
+    <label class="check" id="liveBox"><input type="checkbox" id="live" checked> Live</label>
     <span class="grow"></span>
-    <span class="link" id="credit">About</span>
+    <div class="btn primary" id="make">Make Glass</div>
   </div>
   <script src="index.js"></script>
 </body>

@@ -39,7 +39,7 @@ For the code-level contract, read [AGENTS.md](../AGENTS.md) next.
 
 ---
 
-## 2. What the product does (as of v0.7.0)
+## 2. What the product does (as of v0.7.1)
 
 Both apps share the same engine, the same 42 settings, the same looks and the same icons (`photoshop/looks.js`). Shared since 0.7.0:
 - **Looks:** Liquid Glass, Clear, Frosted, Glassmorphism, Ice, Smoked, Crystal, Bubble, Film frost, shown as preview cards a page at a time (arrows and dots, no scrollbar). **Save look** keeps your own looks for every document.
@@ -235,6 +235,17 @@ The owner confirmed: **"All working"** (v0.5.5).
   - **Mac:** the Photoshop `.ccx` already runs on macOS (untested there). Illustrator for Mac can't be built on Windows: it needs Xcode, the Mac SDK and a WKWebView window. Not started; stated honestly.
   - Published as **v0.7.0** with `installer/Install Illustrator on Windows.bat` (verified: it installed the plug-in after the UAC prompt).
 
+### Phase 14: A tried 0.8.0, a revert, and fine control [0.7.1]
+- **0.8.0 (not released):** an Illustrator CEP panel (Window › Extensions), a Mac build on GitHub's Mac runners, always-group Make Glass and a live-refresh fix. In Illustrator 2026 the panel showed no options (CEP exposes Node's `module`, so `looks.js` never reached the page). The owner asked to **revert everything to 0.7.0**. The work is kept on the branch `ci/mac-build`.
+- **"The effect gets absurdly high with small values."**
+  - Wide sliders (sizes, 0–100 and 0–200 ranges) move on a square-root scale: low values get most of the travel. Amount sliders (0–1) stay linear. Helpers: `curved`, `toSlider`, `fromSlider` in `looks.js`.
+  - Frost blurs half as much per unit (blur radius = frost / 2), and Make Glass no longer forces frost to at least 8 on small shapes.
+- **"Icons look black; the panel has no proper bounding; make Photoshop look exactly like the Illustrator window; remove the preview."**
+  - Icons: UXP ignored the paint on `<svg>`, so shapes filled black. The paint now sits on every shape.
+  - The Photoshop panel copies the Illustrator window: green header with logo and version, card sections, tab bar, help bar, footer with Refresh, Live and Make Glass.
+  - Changed settings show a green dot; double-clicking a setting's name resets it.
+  - The live preview was removed.
+
 ## 4. Fundamentals installed on the dev machine (Windows 11)
 
 | Tool | Why | Notes |
@@ -267,6 +278,7 @@ Dev loop for Photoshop:
 - `backup/liquid-glass-v0.5.0` (GitHub): a snapshot before the Cosmic and refine work.
 - `cosmic` (**local only**): the shelved Cosmic styles.
 - `refine` (local): the development branch merged into `main` for v0.6.0.
+- `ci/mac-build` (GitHub, newest commit local only): the shelved 0.8.0 work (Illustrator CEP panel, Mac CI build).
 - **Local only:** `E:\AI\liquid-glass-archive\illustrator-script` (the old ExtendScript prototype); `E:\AI\SDK` (Adobe SDK, never committed); the developer kit zips in `E:\AI`.
 
 ---

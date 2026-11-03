@@ -71,15 +71,25 @@
     pen: '<path d="M10.5 2.5 13.5 5.5 6 13H3v-3Z"/><path d="M9 4l3 3"/>',
     glass: '<rect x="2" y="3" width="12" height="10" rx="3.5"/><path d="M4.5 6.5a2 2 0 0 1 2-2"/>',
     finish: '<path d="M3 13 9.5 6.5M11 2.5v2M11 8.5v2M8 5.5h-2M15 5.5h-2M3 13l-1 1"/>',
+    refresh: '<path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/>',
+    info: '<circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4M8 4.9v.1"/>',
     plus: '<path d="M8 3v10M3 8h10"/>',
     left: '<path d="M10 3 5 8l5 5"/>',
     right: '<path d="M6 3l5 5-5 5"/>',
   };
   // Stroke attributes sit on the <svg> itself, so they work without CSS (Photoshop panels) too.
-  const icon = (name, color) => `<svg class="i" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="${color || "currentColor"}" ` +
-    `stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ""}</svg>`;
+  // Paint goes on every shape: Photoshop's UXP doesn't pass fill/stroke down from <svg>, so shapes drew filled black.
+  const icon = (name, color) => `<svg class="i" viewBox="0 0 16 16" width="14" height="14">` +
+    (ICONS[name] || "").replace(/<(path|circle|rect)\b/g, `<$1 fill="none" stroke="${color || "currentColor"}" stroke-width="1.35" ` +
+      `stroke-linecap="round" stroke-linejoin="round"`) + `</svg>`;
 
-  const api = { DEFAULTS, KEEP, LOOKS, ICONS, icon, pad, applyLook, lookOf };
+  // Wide sliders (sizes, 0-100 ranges) move on a square-root scale: low values get most of the travel, so a small
+  // drag near the start no longer makes the effect jump. The slider element runs 0..1; the setting keeps its own range.
+  const curved = (min, max) => min >= 0 && max >= 6;
+  const toSlider = (v, min, max) => (curved(min, max) ? Math.sqrt(Math.min(1, Math.max(0, (v - min) / (max - min)))) : v);
+  const fromSlider = (t, min, max, step) => (curved(min, max) ? +(Math.round((min + (max - min) * t * t) / step) * step).toFixed(4) : t);
+
+  const api = { DEFAULTS, KEEP, LOOKS, ICONS, icon, pad, applyLook, lookOf, curved, toSlider, fromSlider };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SudoLooks = api;
 })(typeof window !== "undefined" ? window : this);

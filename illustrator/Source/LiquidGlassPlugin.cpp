@@ -632,7 +632,7 @@ private:
 			float s = float(std::min(u.right - u.left, u.top - u.bottom));
 			if (count) {
 				p[kDepth] = std::round(std::min(200.f, std::max(8.f, 0.25f * s)));
-				if (p[kFrost] > 0) p[kFrost] = std::round(std::min(200.f, std::max(8.f, 0.06f * s)));
+				if (p[kFrost] > 0) p[kFrost] = std::round(std::min(200.f, std::max(2.f, 0.06f * s)));
 			}
 			sAIMdMemory->MdMemoryDisposeHandle((AIMdMemoryHandle)matches);
 		}

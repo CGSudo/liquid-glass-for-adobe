@@ -2,7 +2,7 @@
 
 Sudo Liquid Glass recreates Apple's Liquid Glass material inside Adobe apps. It is live and non-destructive: the glass reads what is behind it and re-renders, and it never merges or flattens layers.
 
-- **Today (v0.7.0):**
+- **Today (v0.7.1):**
   - **Photoshop:** a UXP plugin, Windows and macOS (wasm engine, no platform code; tested on Windows only).
   - **Illustrator:** a native Live Effect (`.aip`), **Windows only**.
 - **Goal:** the same engine in **Premiere Pro and After Effects**, and Illustrator on Mac. These are plans: never describe them as available.
@@ -21,8 +21,8 @@ core/src/lib.rs          Rust renderer, glass_core: render(), fill_paths(), smoo
                          (lg_render, lg_fill, lg_param_count, lg_alloc, lg_free)
 core/Cargo.toml          crate types: rlib (preview), cdylib (wasm for Photoshop), staticlib (native hosts)
 photoshop/manifest.json  UXP manifest v5 (MUST be saved without a UTF-8 BOM, or Adobe's installer fails with -267)
-photoshop/index.html     panel markup and CSS (compact, theme-aware, SUDO brand green #0d4431 / accent #2fae7c)
-photoshop/index.js       panel UI, glass detection, history-suspension reads, live poller, Make Glass, preview
+photoshop/index.html     panel markup and CSS: same look as the Illustrator window (fixed dark palette, SUDO green)
+photoshop/index.js       panel UI, glass detection, history-suspension reads, live poller, Make Glass
 photoshop/engine.js      loads glass_core.wasm (or a native addon if one exists); render() and fill()
 photoshop/paths.js       Photoshop vector path (batchPlay pathComponents) → fill_paths stream
 photoshop/looks.js       SHARED with Illustrator: DEFAULTS, the built-in looks, pad()/applyLook()/lookOf(), line icons
@@ -49,7 +49,7 @@ package.json             dev tooling only: `npm install` (jsdom), then `npm test
 | 2 | refraction ("Lens strength") | 80 | 15 | shadow_offset_y (px) | 8 |
 | 3 | depth ("Edge width", px) | 16 | 16 | grain (0 = off) | 0 |
 | 4 | dispersion ("Dispersion", rainbow) | 20 | 17 | grain_size (px) | 1.5 |
-| 5 | frost ("Blur", radius px) | 12 | 18 | dim (0 = off) | 0 |
+| 5 | frost ("Frost", px; blur radius = half) | 12 | 18 | dim (0 = off) | 0 |
 | 6 | splay ("Edge softness") | 30 | 19 | dim_spread (px) | 40 |
 | 7 | brightness | 0.06 | 20 | merge (px) | 24 |
 | 8 | saturation ("Vividness") | 1.2 | 21 | bevel ("Emboss", advanced) | 0.32 |
@@ -103,7 +103,7 @@ To add a parameter:
   6. `resumeHistory(…, false)` rolls everything back, so the document is never modified by a read.
 - **Write:** a second suspension does `putPixels` into both engine layers, as one undo step.
 - **Live updates:** `poll()` runs every 300 ms. It watches `doc.activeHistoryState`, skips while stepped back in undo, and re-renders every glass from bottom to top.
-- **Preview:** after each render the panel shows a JPEG thumbnail of the selected glass: backdrop + shadow + glass, ≤ 320 px wide, made with `imaging.encodeImageData`.
+- **Look thumbnails:** each look card is an engine render of a test scene (`previewPixels` + `imaging.encodeImageData`). The live preview of the selected glass was removed in 0.7.1 at the owner's request.
 - **Edge effects:** the "Add strokes, glows & shadows…" button opens the Layer Style dialog on a source shape (fill 0 keeps effects visible, and the stroke traces the real vector).
 
 ## UXP / Photoshop gotchas (each one cost a bug)
@@ -113,6 +113,7 @@ To add a parameter:
 - **Locked layers** reject `putPixels`.
 - **Fill 0 layers** report empty bounds and pixels (see Peek above).
 - **Files written from PowerShell 5.1** with `Set-Content`/`Out-File` get re-encoded: README mojibake, and "◆" turned into "?". Edit text files with the editor tools or Node, never PowerShell.
+- **SVG icons:** UXP doesn't pass `fill`/`stroke` from `<svg>` down to its shapes (they drew filled black). `icon()` in `looks.js` puts the paint on every shape.
 - **Help text:** the panel shows plain-language help on hover. Every slider row needs a help string (`ui.test.js` checks it).
 
 ## Commands (run all before you commit)

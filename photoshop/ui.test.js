@@ -3,6 +3,13 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
+// Wide sliders use a square-root scale; amounts (0..1) stay linear.
+const looksApi = require("./looks.js");
+assert.strictEqual(looksApi.fromSlider(0.5, 0, 200, 1), 50);
+assert.strictEqual(looksApi.toSlider(50, 0, 200), 0.5);
+assert.strictEqual(looksApi.fromSlider(0.3, 0, 1, 0.01), 0.3);
+// Icons carry their paint on every shape (UXP does not inherit it from <svg>).
+assert.match(looksApi.icon("frost", "#fff"), /^<svg[^>]*><path fill="none" stroke="#fff"/);
 const ps = __dirname;
 const html = fs.readFileSync(path.join(ps, "index.html"), "utf8").replace(/<script.*<\/script>/, "");
 const win = new JSDOM(html, { runScripts: "outside-only" }).window;
@@ -34,7 +41,7 @@ const click = (el) => el.dispatchEvent(new win.Event("click"));
 // Panel and brand.
 assert.deepStrictEqual([...win.document.querySelectorAll("#tabs .tab")].map((t) => t.textContent), ["Glass", "Light", "Shadow", "Finish"]);
 assert(win.document.querySelector("#mark img"), "logo shown");
-assert.strictEqual($("footVersion").textContent, "v0.7.0");
+assert.strictEqual($("footVersion").textContent, "v0.7.1");
 assert.strictEqual([...win.document.querySelectorAll(".param")].filter((r) => !r.title).length, 0, "every setting explains itself");
 click($("brandLink"));
 click($("infoBtn"));
@@ -53,6 +60,14 @@ assert.strictEqual(advBody.style.display, "none", "Advanced starts closed");
 click(adv.children[0]);
 assert.strictEqual(advBody.style.display, "block");
 for (const i of [21, 22, 23, 24, 25, 26, 31, 32, 33, 35]) assert($("p" + i) && $("n" + i), "control " + i);
+
+// A changed setting is marked; double-clicking its name resets it to the default.
+win.T("setParam(5, 40)");
+assert.strictEqual($("p5").parentNode.className, "param changed");
+$("p5").parentNode.firstChild.dispatchEvent(new win.Event("dblclick"));
+assert.strictEqual($("p5").parentNode.className, "param");
+assert.strictEqual($("n5").value, "12");
+win.T("clearTimeout(timer)"); // no document here: skip the pending apply
 for (const i of [30, 34]) assert($("s" + i), "select " + i);
 assert($("t13") && $("t31"), "shadow and stroke toggles");
 assert.strictEqual($("p33").parentNode.style.display, "none", "gradient-only rows hidden for a solid stroke");

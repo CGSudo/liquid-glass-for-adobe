@@ -12,7 +12,7 @@ const { app, core, action, imaging, constants } = require("photoshop");
 const { loadEngine } = require("./engine.js");
 const { pathStream } = require("./paths.js");
 // Defaults, built-in looks and icons are shared with the Illustrator plug-in.
-const { DEFAULTS, LOOKS, icon, pad, applyLook, lookOf } = require("./looks.js");
+const { DEFAULTS, KEEP, LOOKS, icon, pad, applyLook, lookOf, curved, toSlider, fromSlider } = require("./looks.js");
 
 const ANGLE = 0, DEPTH = 3, SHADOW = 13, GRAIN = 16, GRAIN_SIZE = 17, DIM = 18, GLOW = 25, STROKE = 31;
 const BLENDS = ["Normal", "Screen", "Overlay", "Soft light", "Add", "Multiply"];
@@ -21,10 +21,10 @@ const FORMATS = [["Super 8", 5.79], ["16 mm", 10.26], ["35 mm (36×24)", 36], ["
 const GRAIN_MM = 0.018;
 // Panel layout: tabs of sections; items are [param index, label, min, max, step, help, icon]. Objects are special controls.
 const TABS = [["Glass", "glass"], ["Light", "sun"], ["Shadow", "shadow"], ["Finish", "finish"]];
-const ICON_COLOR = "#8c9691"; // reads on both the light and the dark Photoshop theme
+const ICON_COLOR = "#e9efec"; // the panel is always dark (same look as Illustrator), so icons are white
 const SECTIONS = [
   // Always on screen, above the tabs: what people change most, so any look can be fine-tuned at once.
-  { tab: -1, title: "Quick", items: [
+  { tab: -1, title: "Quick adjust", icon: "advanced", items: [
     [5, "Frost", 0, 200, 1, "How frosted the glass is: blurs everything behind it, in pixels. 0 = crystal clear.", "frost"],
     [2, "Lens", 0, 200, 1, "How much the glass bends the picture behind it, like a magnifying lens. 0 = flat window.", "lens"],
     [3, "Edge width", 1, 300, 1, "How wide the rounded rim is, in pixels. Wider = rounder glass, but a smaller clear middle.", "edge"],
@@ -269,7 +269,7 @@ async function packEngineLayers(doc, g, under) {
   return box;
 }
 
-// Small picture of the render for the panel: backdrop, then shadow, then glass, scaled to ≤ 320 px wide, as JPEG.
+// Small picture of a render (look thumbnails): backdrop, then shadow, then glass, scaled to ≤ 320 px wide.
 const PREVIEW_W = 320;
 function previewPixels(backdrop, out, w, h) {
   const s = Math.max(1, w / PREVIEW_W, h / 200);
@@ -286,17 +286,6 @@ function previewPixels(backdrop, out, w, h) {
     }
   }
   return { rgb, tw, th };
-}
-async function showPreview(backdrop, out, w, h) {
-  const { rgb, tw, th } = previewPixels(backdrop, out, w, h);
-  const img = await imaging.createImageDataFromBuffer(rgb, { width: tw, height: th, components: 3, chunky: true, colorSpace: "RGB" });
-  try {
-    const b64 = await imaging.encodeImageData({ imageData: img, base64: true });
-    $("preview").setAttribute("src", "data:image/jpeg;base64," + b64);
-    $("previewBox").style.display = "block";
-  } finally {
-    img.dispose();
-  }
 }
 
 // Union of the shapes plus room for lens reach, shadow, dim halo and liquid bridges, clipped to the document.
@@ -353,15 +342,6 @@ async function renderGlass(ctx, doc, g) {
   const all = new Uint8Array(masks.length * w * h);
   masks.forEach((mk, i) => all.set(mk, i * w * h));
   const out = engine.render(new Float32Array(p), backdrop, all, w, h);
-  // Panel preview shows the selected glass (or, with nothing selected, the last one rendered).
-  const sel = doc.activeLayers.length && glassOf(doc.activeLayers[0]);
-  if (!sel || sel.group.id === g.group.id) {
-    try {
-      await showPreview(backdrop, out, w, h);
-    } catch (e) {
-      at("preview skipped: " + describe(e)); // cosmetic: never block the render
-    }
-  }
   const opts = { width: w, height: h, components: 4, chunky: true, colorSpace: "RGB" };
   const glassImg = await imaging.createImageDataFromBuffer(out.glass, opts);
   const underImg = await imaging.createImageDataFromBuffer(out.under, opts);
@@ -478,7 +458,7 @@ function makeGlass() {
       const short = Math.min(...shapes.map((s) => Math.min(s.bounds.right - s.bounds.left, s.bounds.bottom - s.bounds.top)));
       params[DEPTH] = Math.round(Math.min(200, Math.max(8, 0.25 * short)));
       // Blur scales the same way, so big glass is as frosted as small glass (unless Clear style turned it off).
-      if (params[5] > 0) params[5] = Math.round(Math.min(200, Math.max(8, 0.06 * short)));
+      if (params[5] > 0) params[5] = Math.round(Math.min(200, Math.max(2, 0.06 * short)));
       showParams();
       at("create glass layers");
       const make = (name) => (doc.createPixelLayer ? doc.createPixelLayer({ name }) : doc.createLayer({ name }));
@@ -550,8 +530,11 @@ function showParams() {
   for (const s of SECTIONS) {
     for (const it of s.items) {
       if (Array.isArray(it)) {
-        $("p" + it[0]).value = params[it[0]];
+        $("p" + it[0]).value = toSlider(params[it[0]], it[2], it[3]);
         $("n" + it[0]).value = fmt(params[it[0]]);
+        // Edge width and merge are sized to the shape, so they always differ from the default: no marker for them.
+        const changed = !KEEP.includes(it[0]) && Math.abs(params[it[0]] - DEFAULTS[it[0]]) > 1e-4;
+        $("p" + it[0]).parentNode.className = changed ? "param changed" : "param";
       } else if (it.dial !== undefined) {
         const a = (params[it.dial] * Math.PI) / 180;
         $("knob").style.left = 10 + 9 * Math.sin(a) + "px"; // 28 px dial, 6 px knob
@@ -634,6 +617,9 @@ function row(label, help, ...controls) {
   l.className = "label";
   l.textContent = label;
   if (row.icon) l.insertBefore(iconEl(row.icon), l.firstChild);
+  const dot = document.createElement("span");
+  dot.className = "mod";
+  l.appendChild(dot);
   r.appendChild(l);
   for (const c of controls) r.appendChild(c);
   explain(r, label, help);
@@ -642,10 +628,13 @@ function row(label, help, ...controls) {
 
 function sliderRow([i, label, min, max, stepSize, help]) {
   const s = document.createElement("input");
-  for (const [k, v] of [["type", "range"], ["id", "p" + i], ["min", min], ["max", max], ["step", stepSize]]) s.setAttribute(k, String(v));
+  const [lo, hi, st] = curved(min, max) ? [0, 1, 0.001] : [min, max, stepSize];
+  for (const [k, v] of [["type", "range"], ["id", "p" + i], ["min", lo], ["max", hi], ["step", st]]) s.setAttribute(k, String(v));
   s.className = "slider";
-  s.addEventListener("input", () => setParam(i, Number(s.value)));
-  return row(label, help, s, numberBox(i, min, max));
+  s.addEventListener("input", () => setParam(i, fromSlider(Number(s.value), min, max, stepSize)));
+  const r = row(label, help + " Double-click the name to reset it.", s, numberBox(i, min, max));
+  r.firstChild.addEventListener("dblclick", () => setParam(i, DEFAULTS[i]));
+  return r;
 }
 
 function dialRow({ dial, label, help }) {
@@ -935,6 +924,7 @@ function buildUI() {
       row.icon = null;
     }
     if (s.tab < 0) {
+      $("quick").appendChild(head);
       $("quick").appendChild(body);
       continue;
     }
@@ -945,7 +935,8 @@ function buildUI() {
   $("make").addEventListener("click", makeGlass);
   $("refresh").addEventListener("click", () => run("Update Liquid Glass"));
   explain($("refresh"), "Refresh", "Re-renders every glass now. Use it after painting with a brush, which Photoshop doesn't report.");
-  explain($("previewBox"), "Preview", "A small live picture of the selected glass, so you can see changes even when it is off-screen.");
+  $("refresh").insertBefore(iconEl("refresh"), $("refresh").firstChild);
+  $("helpIcon").innerHTML = icon("info", "#2fae7c");
   explain($("liveBox"), "Live updates", "When on, the glass redraws by itself whenever you change anything in the document.");
   buildBrand();
   buildLooks();
@@ -973,9 +964,9 @@ function buildBrand() {
     $("about").style.display = on ? "block" : "none";
     $("params").style.display = on ? "none" : "block";
     $("tabs").style.display = on ? "none" : "flex";
+    $("presets").style.display = $("quick").style.display = on ? "none" : "block";
   };
   $("infoBtn").addEventListener("click", () => about($("about").style.display === "none"));
-  $("credit").addEventListener("click", () => about(true));
   $("back").addEventListener("click", () => about(false));
   // Opens in the user's browser; Photoshop asks once for permission (manifest: launchProcess https).
   const open = (url) => require("uxp").shell.openExternal(url).catch((e) => status("Couldn't open the link: " + describe(e)));

@@ -142,7 +142,7 @@
     <div class="title">Sudo Liquid Glass</div>
     <div class="by" id="by" data-help="Made by CGSudo. Click to open LinkedIn.">by CGSudo · LinkedIn ↗</div>
   </div>
-  <span class="ver" id="ver">v0.7.0</span>
+  <span class="ver" id="ver">v0.7.1</span>
 </header>
 
 <div class="presets">
@@ -183,7 +183,7 @@
 <script>
 "use strict";
 // Defaults, looks and icons are shared with Photoshop (photoshop/looks.js). Lengths are in points here.
-const { DEFAULTS, KEEP, LOOKS: BUILTIN, icon, pad, applyLook, lookOf } = window.SudoLooks;
+const { DEFAULTS, KEEP, LOOKS: BUILTIN, icon, pad, applyLook, lookOf, curved, toSlider, fromSlider } = window.SudoLooks;
 const DEPTH = 3, SHADOW = 13, GRAIN = 16, GRAIN_SIZE = 17, DIM = 18, MERGE = 20, GLOW = 25, STROKE = 31;
 const BLENDS = ["Normal", "Screen", "Overlay", "Soft light", "Add", "Multiply"];
 const FORMATS = [["Super 8", 5.79], ["16 mm", 10.26], ["35 mm (36×24)", 36], ["Medium format 6×6", 56], ["Large format 4×5", 120]];
@@ -300,17 +300,18 @@ function row(label, ico, text, ...controls) {
 const spacer = () => Object.assign(document.createElement("span"), { className: "grow" });
 
 function slider([i, label, min, max, step, text, ico]) {
-  const s = Object.assign(document.createElement("input"), { type: "range", min, max, step });
+  const s = Object.assign(document.createElement("input"), curved(min, max) ? { type: "range", min: 0, max: 1, step: 0.001 } : { type: "range", min, max, step });
   const n = Object.assign(document.createElement("input"), { className: "num", type: "text" });
-  s.addEventListener("input", () => set(i, +s.value));
+  s.addEventListener("input", () => set(i, fromSlider(+s.value, min, max, step)));
   n.addEventListener("change", () => {
     const v = parseFloat(n.value);
     if (Number.isFinite(v)) set(i, Math.min(max, Math.max(min, v)));
     else n.value = fmt(params[i]);
   });
   refresh.push(() => {
-    s.value = params[i];
-    s.style.setProperty("--fill", ((Math.min(max, Math.max(min, params[i])) - min) / (max - min)) * 100 + "%");
+    s.value = toSlider(params[i], min, max);
+    const t = (Math.min(max, Math.max(min, params[i])) - min) / (max - min);
+    s.style.setProperty("--fill", (curved(min, max) ? Math.sqrt(t) : t) * 100 + "%");
     if (document.activeElement !== n) n.value = fmt(params[i]);
   });
   return Object.assign(row(label, ico, text, s, n), { id: "row" + i });
