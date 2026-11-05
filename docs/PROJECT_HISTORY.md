@@ -272,7 +272,7 @@ The owner confirmed: **"All working"** (v0.5.5).
 - **Result rect differs from the brief:** the brief asked to limit the result rect to the shape plus shadow. An effect's output replaces its whole layer, so the rest of the frame has to pass through. The saving comes from running the engine only on the shape's bounds plus its reach.
 - **Animation added:** everything keyframeable, Wobble, Light follows motion, and a second shape that merges. No `.ffx` presets: After Effects has no scripting call to save one.
 - **Found while testing:**
-  - Premiere doesn't use SmartFX, and in its render call `PF_CHECKOUT_PARAM` returned a keyframed Center frozen at one value, so Premiere reads the `params[]` it is given.
+  - Premiere doesn't use SmartFX, and in its render call `PF_CHECKOUT_PARAM` returned a keyframed Center frozen at one value, so Premiere now reads the `params[]` it is given. That fix is built but not yet confirmed in Premiere: installing it needs a UAC click, and `aftereffects/test/verify_pr.ps1` is the check to run after it.
   - `AfterFX.exe -m -r` starts a second instance that may reopen the last project, so the test script only acts when it sees an environment variable set by its own launch. `-r` also takes the path without extra quotes.
   - A force-killed instance brings up Crash Repair at the next launch; posting WM_QUIT to its UI thread ends it cleanly. `app.quit()` does nothing there. In a default install, scripts can't write files, so results travel in a saved `.aepx`.
   - This version of After Effects has no PNG output template, so tests render TIFF and convert.

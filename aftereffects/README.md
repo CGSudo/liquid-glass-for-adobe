@@ -26,6 +26,7 @@ Layer pickers give you a layer's source, with position and scale ignored, like a
 ## Limits
 - **8-bit engine:** in 16-bit and 32-bit projects, the area inside the glass is computed at 8 bits and HDR values are clipped there. Everything outside the glass stays at full depth. Marked `shortcut:` in `Source/GlassHost.h`.
 - **Colours:** the engine treats values as display-referred, so in a linear working space the glass looks a little different.
+- **Not confirmed yet in Premiere:** keyframed values changing over time (fix built, see `test/verify_pr.ps1`), Wobble, Light follows motion, the Look popup and the layer pickers.
 - **Windows only.**
 - **No `.ffx` presets:** After Effects has no scripting call to save one, so `make_test_project.jsx` shows the setups as a script instead.
 
