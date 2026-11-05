@@ -266,6 +266,17 @@ The owner confirmed: **"All working"** (v0.5.5).
   - `setup/stage.js` + `glass-worker.js`: one live stage (real wasm engine in a worker), used by Setup and by the website, where visitors can drag the glass and switch looks.
   - README: `docs/explainer.webp`, a 17 s recording of the stage in four steps (your shape, Make Glass, move it, the 9 looks). WebP, because the GIF was 14.5 MB and the WebP 1.9 MB.
 
+### Phase 17: After Effects and Premiere Pro (built, not released)
+- **"Give me After Effects and Premiere Pro with every setting, plus animation, fast and low on memory."** Built `aftereffects/`: one `.aex` for both apps, sharing the Rust engine. Details and decisions: [aftereffects/README.md](../aftereffects/README.md).
+- **Backdrop and shape:** the effect's own input is the backdrop, and the shape is keyframeable parameters (rounded rectangle, ellipse, pill; centre, size, radius, rotation), because Premiere's layer pickers are weak. In After Effects, a layer's alpha can replace the shape; "Use clip alpha as shape" and "Backdrop layer" cover applying it directly on text.
+- **Result rect differs from the brief:** the brief asked to limit the result rect to the shape plus shadow. An effect's output replaces its whole layer, so the rest of the frame has to pass through. The saving comes from running the engine only on the shape's bounds plus its reach.
+- **Animation added:** everything keyframeable, Wobble, Light follows motion, and a second shape that merges. No `.ffx` presets: After Effects has no scripting call to save one.
+- **Found while testing:**
+  - Premiere doesn't use SmartFX, and in its render call `PF_CHECKOUT_PARAM` returned a keyframed Center frozen at one value, so Premiere reads the `params[]` it is given.
+  - `AfterFX.exe -m -r` starts a second instance that may reopen the last project, so the test script only acts when it sees an environment variable set by its own launch. `-r` also takes the path without extra quotes.
+  - A force-killed instance brings up Crash Repair at the next launch; posting WM_QUIT to its UI thread ends it cleanly. `app.quit()` does nothing there. In a default install, scripts can't write files, so results travel in a saved `.aepx`.
+  - This version of After Effects has no PNG output template, so tests render TIFF and convert.
+
 ## 4. Fundamentals installed on the dev machine (Windows 11)
 
 | Tool | Why | Notes |
@@ -280,6 +291,8 @@ The owner confirmed: **"All working"** (v0.5.5).
 | Adobe Photoshop 2026, Illustrator 2026 | hosts | Photoshop plugin installed via UPIA |
 | Adobe UPIA (`UnifiedPluginInstallerAgent`) | installs `.ccx` from the command line | Windows: `/install`, `/remove`, `/list all`; macOS: `--install` |
 | Illustrator SDK 2026 (owner download, `E:\AI\SDK`) | Illustrator Live Effect | licence forbids committing it |
+| After Effects SDK 27.0 (Adobe Developer Console, `E:\AI\SDK\AE_SDK`) | After Effects / Premiere effect | licence forbids committing it; `aftereffects/build.ps1` uses its `PiPLTool.exe` |
+| Adobe After Effects 2026, Premiere Pro 2026 | hosts | `aerender.exe` renders test projects; both load `Common\Plug-ins\7.0\MediaCore` |
 
 Dev loop for Photoshop:
 1. Edit the code.
@@ -310,7 +323,7 @@ Dev loop for Photoshop:
    - a Mac build (Xcode, Mac SDK, a WKWebView settings window);
    - confirm the background notifier and the refusals on more documents;
    - optional: engine-rendered look thumbnails in the Illustrator window (Photoshop has them).
-4. **After Effects / Premiere:** design one AE-SDK effect plugin that reuses `lg_render`.
+4. **After Effects / Premiere:** ship it (Setup.exe, `release.ps1`, website), which is the owner's call. Then: an f32 engine path so deep colour isn't 8-bit inside the glass, and animation presets.
 5. **Engine:**
    - linear-light blending;
    - GPU path;

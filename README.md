@@ -105,7 +105,7 @@ Select a shape, group or text and choose **Effect › Stylize › Liquid Glass�
 - [x] **Photoshop** (Windows and macOS): available
 - [x] **Illustrator** (Windows): available
 - [ ] **Illustrator for Mac**: planned
-- [ ] **After Effects** and **Premiere Pro**: planned, not started
+- [ ] **After Effects** and **Premiere Pro** (Windows): built from source and tested in both 2026 apps, not in a release yet. See [aftereffects/README.md](aftereffects/README.md)
 - [ ] GPU rendering, linear-light blending, light/dark adaptive tint
 
 ## How it works
@@ -114,6 +114,7 @@ core/        Rust renderer (glass_core): backdrop + shape masks → glass layer 
 photoshop/   UXP plugin: panel, live updates, vector and text outline reader, WebAssembly bridge;
              looks.js (defaults, looks and icons) is shared with Illustrator and Setup
 illustrator/ native Live Effect (C++, Illustrator SDK) with a WebView2 settings window
+aftereffects/ one native effect for After Effects and Premiere Pro (C++, After Effects SDK), not released yet
 setup/       the Windows Setup.exe: glass window, live tour of the looks, one-click install of both plugins
 preview/     renders the preview images from test shapes
 docs/        project website (GitHub Pages) and the full project history
@@ -140,6 +141,8 @@ cargo build -p glass_core --release --target wasm32-unknown-unknown
 Package as `dist/LiquidGlass-for-Adobe.ccx` and install with `powershell -ExecutionPolicy Bypass -File install.ps1` (Windows) or `sh install.sh` (macOS). Add `-NoInstall` / `--no-install` to only build the package.
 
 **Illustrator (Windows):** needs Visual Studio C++ Build Tools, the [Illustrator SDK](https://developer.adobe.com/console) and the Microsoft.Web.WebView2 NuGet package. See [illustrator/README.md](illustrator/README.md).
+
+**After Effects and Premiere Pro (Windows):** needs Visual Studio C++ Build Tools and the [After Effects SDK](https://developer.adobe.com/console). See [aftereffects/README.md](aftereffects/README.md).
 
 **Setup.exe and every release file:** `powershell -ExecutionPolicy Bypass -File release.ps1` builds both plugins, Setup.exe and all downloads into `dist/release`.
 

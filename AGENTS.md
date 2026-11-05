@@ -5,7 +5,8 @@
 - **Today (v0.7.3):**
   - **Photoshop:** a UXP plugin, Windows and macOS (wasm engine, no platform code; tested on Windows only).
   - **Illustrator:** a native Live Effect (`.aip`), **Windows only**.
-- **Goal:** the same engine in **Premiere Pro and After Effects**, and Illustrator on Mac. These are plans: never describe them as available.
+- **Built, not released yet:** one native effect (`aftereffects/`, `.aex`, Windows) for **After Effects and Premiere Pro**. Tested on Windows in both 2026 apps. It isn't in any release, Setup.exe or website copy: say so until the owner ships it.
+- **Goal:** Illustrator on Mac. This is a plan: never describe it as available.
 - **Packaging:** Photoshop `.ccx` (UXP; ZXP is for CEP extensions and doesn't apply). Illustrator `.aip`. Windows users get one `Setup.exe` (`setup/`) that installs both; Mac users double-click the `.ccx`.
 - **Name:** never put "Adobe" first in the product name (Adobe's trademark rules); "… for Adobe" is the allowed form. Internal ids stay as they were: UXP id `com.liquidglass.photoshop`, localStorage key `sudoLiquidGlass.looks`, `%APPDATA%\Sudo Liquid Glass` (saved presets and log), so upgrades keep users' data.
 
@@ -33,6 +34,8 @@ photoshop/*.test.js      engine.test.js / paths.test.js run the real wasm; ui.te
 preview/src/main.rs      renders preview*.png from a synthetic backdrop (engine test renders, not screenshots)
 illustrator/             native Live Effect: Source/*.cpp (render, notifier, menus, checks), ui/panel.html (settings
                          window, WebView2), build.ps1, test/run_test.ps1 (settings window without Illustrator)
+aftereffects/            one native effect for After Effects and Premiere Pro: Source/GlassHost.h (parameter table, looks, shapes, frame compositor; no SDK),
+                         Source/LiquidGlassAE.cpp (SDK glue), build.ps1, params.test.js (in npm test), test/ (no-app test, verify_ae.ps1, verify_pr.ps1)
 setup/                   Windows Setup.exe: setup.cpp (Win32 + WebView2 on an acrylic window; installs via UPIA and an elevated
                          --copy-aip of itself; --silent for IT), setup.html (looks tour), build.ps1;
                          stage.js + glass-worker.js = the live engine demo, shared with the website
@@ -78,7 +81,7 @@ To add a parameter:
 1. Append it to the end of the list. Never reorder.
 2. `PARAM_COUNT` follows from the struct size, so leave it alone.
 3. Update `DEFAULTS` in `photoshop/looks.js` (both apps read it).
-4. Update `kParamCount` in `illustrator/Source/LiquidGlassDialog.h`, `kDefaults` in `illustrator/Source/LiquidGlassPlugin.cpp` and `illustrator/test/dialog_test.cpp`, and `kLengths` if the new value is a length (pt → px).
+4. Update `kParamCount` in `illustrator/Source/LiquidGlassDialog.h`, `kDefaults` in `illustrator/Source/LiquidGlassPlugin.cpp` and `illustrator/test/dialog_test.cpp`, and `kLengths` if the new value is a length (pt → px). For After Effects / Premiere: `kDefaults`, a row in `kRows` and `kLengths` in `aftereffects/Source/GlassHost.h`, and `kCoreCount`.
 5. Update the `param_layout_matches_js` test and the param arrays in `photoshop/engine.test.js`.
 
 `decodeName` pads older saved glasses (16, 21, 25 or 30 values) with the defaults, so existing documents keep working.
@@ -164,11 +167,11 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -NoInstall
   - Lengths are stored in **pt** and converted to px (2 px per pt, capped at 4 MP) at render: `kLengths` lists them.
   - Tried and removed: a toolbar tool and Alt + double-click (did not work for the owner in Illustrator 2026).
   - **Mac:** needs an Xcode build on a Mac, the Mac SDK and a WKWebView settings window. Not started.
-- **After Effects and Premiere Pro:** one effect plugin built with the After Effects SDK runs in both apps, because Premiere hosts AE effect plugins.
-  - Backdrop: the layer's input.
-  - Mask: the layer's alpha.
-  - Params: AE effect parameters, keyframeable, which gives animation for free.
-  - Render: call `lg_render` per frame, using multi-frame rendering (MFR).
+- **After Effects and Premiere Pro (Windows, built, not released):** see [aftereffects/README.md](aftereffects/README.md).
+  - One `.aex` installed in `Common\Plug-ins\7.0\MediaCore\CGSudo`, which both apps load.
+  - Backdrop: the effect's input, usually on an adjustment layer. Mask: keyframeable shape parameters, because Premiere's layer pickers are weak; in After Effects, optionally a layer's alpha.
+  - Render: `lg_render` on the shape's bounds plus `Margin`; the rest of the frame passes through at full bit depth. After Effects uses SmartFX and MFR, Premiere `PF_Cmd_RENDER` with BGRA 8-bit and 32-bit float.
+  - Testing next to someone's open After Effects: `AfterFX.exe -m -r` starts a second instance that may reopen their last project, so the test script checks an environment variable only that launch has. Never force-kill a test instance: the next launch shows the Crash Repair prompt.
 - **Engine work that helps every host:**
   - linear-light blur and refraction;
   - a GPU port of the pipeline;
