@@ -16,7 +16,7 @@
 
 		var proj = new File(dir + "/lg_pr_test.prproj");
 		app.newProject(proj.fsName);
-		$.sleep(3000);
+		for (var w = 0; w < 60 && !(app.project && app.project.rootItem); w++) $.sleep(500);
 		var ok = app.project.importFiles([dir + "/bg.png"], true, app.project.getInsertionBin(), false);
 		log("import " + ok + " items " + app.project.rootItem.children.numItems);
 		var clip = app.project.rootItem.children[0];
@@ -54,9 +54,11 @@
 			var ce = lg.properties[m];
 			if (ce.displayName !== "Center") continue;
 			ce.setTimeVarying(true);
+			// Key times count from the clip's source media, not the sequence, so start at its in-point.
+			log("clip in " + track.inPoint.seconds + " out " + track.outPoint.seconds + " start " + track.start.seconds + " end " + track.end.seconds);
 			var t0 = new Time(), t4 = new Time();
-			t0.seconds = 0;
-			t4.seconds = 4;
+			t0.seconds = track.inPoint.seconds;
+			t4.seconds = track.inPoint.seconds + 4;
 			ce.addKey(t0);
 			ce.addKey(t4);
 			ce.setValueAtKey(t0, [0.25, 0.3], 1);
@@ -74,6 +76,18 @@
 		}
 		render(plain, "pr_plain.mp4");
 		render(seq, "pr_glass.mp4");
+		// Each extra alone, so comparing with pr_glass.mp4 at the same time shows what it changed. Checkbox labels read back empty: Light follows motion is the row after Direction.
+		var wobble = null, follow = null;
+		for (var n = 0; n < lg.properties.numItems; n++) {
+			if (lg.properties[n].displayName === "Wobble") wobble = lg.properties[n];
+			if (lg.properties[n].displayName === "Direction") follow = lg.properties[n + 1];
+		}
+		wobble.setValue(40, true);
+		render(seq, "pr_wobble.mp4");
+		wobble.setValue(0, true);
+		follow.setValue(true, true);
+		log("follow reads back " + follow.getValue());
+		render(seq, "pr_follow.mp4");
 		app.project.save();
 		log("done");
 		app.quit();

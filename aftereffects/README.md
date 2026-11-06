@@ -26,7 +26,7 @@ Layer pickers give you a layer's source, with position and scale ignored, like a
 ## Limits
 - **8-bit engine:** in 16-bit and 32-bit projects, the area inside the glass is computed at 8 bits and HDR values are clipped there. Everything outside the glass stays at full depth. Marked `shortcut:` in `Source/GlassHost.h`.
 - **Colours:** the engine treats values as display-referred, so in a linear working space the glass looks a little different.
-- **Not confirmed yet in Premiere:** keyframed values changing over time (fix built, see `test/verify_pr.ps1`), Wobble, Light follows motion, the Look popup and the layer pickers.
+- **Not confirmed yet in Premiere:** the Look popup and the layer pickers.
 - **Windows only.**
 - **No `.ffx` presets:** After Effects has no scripting call to save one, so `make_test_project.jsx` shows the setups as a script instead.
 
@@ -41,4 +41,4 @@ This installs into `C:\Program Files\Adobe\Common\Plug-ins\7.0\MediaCore\CGSudo\
 - `npm test` includes `aftereffects/params.test.js`: same defaults, looks, labels and ranges as the Photoshop panel.
 - `test/run_test.ps1`: host logic without either app (mapping, shapes, every pixel format, buffer origins, 1080p timing).
 - `test/verify_ae.ps1`: real After Effects. Builds comps by script in a separate instance, renders them with `aerender`, and times them. A project open in another After Effects is left alone.
-- `test/verify_pr.ps1`: real Premiere Pro, which must be closed first. Applies the effect to a clip, keyframes it and exports frames.
+- `test/verify_pr.ps1`: real Premiere Pro, which must be closed first. Applies the effect to a clip, keyframes it and exports it plain, keyframed, with Wobble and with Light follows motion. Compare the frames by eye. Pass `-Out` to keep the exports off a full C: drive.

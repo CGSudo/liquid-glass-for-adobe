@@ -7,7 +7,7 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 Get-ChildItem $Out -File | Remove-Item -Force
 Copy-Item $Background (Join-Path $Out "bg.png")
 $env:LG_TEST_DIR = $Out
-$p = Start-Process "C:\Program Files\Adobe\Adobe Premiere Pro 2026\Adobe Premiere Pro.exe" -ArgumentList "/C", "es.processFile", "$PSScriptRoot\verify_pr.jsx" -PassThru
+$p = Start-Process "C:\Program Files\Adobe\Adobe Premiere Pro 2026\Adobe Premiere Pro.exe" -ArgumentList "/C", "es.processFile", "$PSScriptRoot\verify_pr.jsx" -WorkingDirectory $Out -PassThru
 $log = Join-Path $Out "pr.log"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 while ($sw.Elapsed.TotalSeconds -lt $TimeoutSec -and -not $p.HasExited) {
