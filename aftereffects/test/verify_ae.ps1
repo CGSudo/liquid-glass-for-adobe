@@ -27,6 +27,7 @@ foreach ($name in "lg_8bit", "lg_16bit", "lg_32bit") {
     & "$sf\aerender.exe" -project (Join-Path $Out "$name.aepx") -v ERRORS_AND_PROGRESS -log (Join-Path $Out "$name.log")
     Write-Host "$name exit $LASTEXITCODE in $([int]$t.Elapsed.TotalSeconds) s"
 }
+Start-Sleep 3 # aerender can return just before its last frame lands on disk
 Add-Type -AssemblyName System.Drawing
 $n = 0
 foreach ($t in Get-ChildItem $Out -Filter *.tif) {
@@ -40,6 +41,7 @@ foreach ($t in Get-ChildItem $Out -Filter *.tif) {
 Write-Host "$n frames in $Out"
 
 # Timing: wall clock of aerender on 120 frames at 1080p, effect on versus off. App start and file writing cancel out.
+# shortcut: only the first mode measured is real, the second reads the first's disk cache and shows about +0 ms; to time both, render each with different settings.
 foreach ($mfr in "ON", "OFF") {
     $sec = @{}
     foreach ($name in "t_off", "t_on", "t_full") {

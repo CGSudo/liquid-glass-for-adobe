@@ -276,6 +276,7 @@ The owner confirmed: **"All working"** (v0.5.5).
   - `AfterFX.exe -m -r` starts a second instance that may reopen the last project, so the test script only acts when it sees an environment variable set by its own launch. `-r` also takes the path without extra quotes.
   - A force-killed instance brings up Crash Repair at the next launch; posting WM_QUIT to its UI thread ends it cleanly. `app.quit()` does nothing there. In a default install, scripts can't write files, so results travel in a saved `.aepx`.
   - This version of After Effects has no PNG output template, so tests render TIFF and convert.
+  - `verify_ae.ps1` timing: whichever Multi-Frame Rendering mode runs second reads the first's disk cache and looks free (+3 ms when MFR on ran second, +2 ms when MFR off ran second). First-pass numbers at 1080p, added per frame: MFR on +16 ms (800x400) and +77 ms (full frame frosted with shadow); MFR off +62 ms and +262 ms, measured on an older build that read the settings twice per frame, so the current build may be a little faster there.
 
 ## 4. Fundamentals installed on the dev machine (Windows 11)
 
