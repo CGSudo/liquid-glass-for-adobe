@@ -3,6 +3,12 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
+// Photoshop looks for name@1x.png / name@2x.png; without the suffix it shows the dummy icon (Adobe rejected a build for this).
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "manifest.json"), "utf8"));
+for (const ic of [...manifest.icons, ...manifest.entrypoints.flatMap((e) => e.icons)]) for (const s of ic.scale) {
+  const png = fs.readFileSync(path.join(__dirname, ic.path.replace(".png", `@${s}x.png`)));
+  assert.deepStrictEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [ic.width * s, ic.height * s], `${ic.path} @${s}x size`);
+}
 // Wide sliders use a square-root scale; amounts (0..1) stay linear.
 const looksApi = require("./looks.js");
 assert.strictEqual(looksApi.fromSlider(0.5, 0, 200, 1), 50);
