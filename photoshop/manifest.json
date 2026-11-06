@@ -9,7 +9,7 @@
     "minVersion": "24.2.0"
   },
   "icons": [
-    { "width": 24, "height": 24, "path": "icon.png", "scale": [1, 2], "theme": ["all"], "species": ["pluginList"] }
+    { "width": 24, "height": 24, "path": "icon.png", "scale": [1, 2], "theme": ["darkest", "dark", "light", "lightest", "all"], "species": ["pluginList"] }
   ],
   "entrypoints": [
     {
@@ -19,7 +19,7 @@
         "default": "Liquid Glass for Adobe"
       },
       "icons": [
-        { "width": 23, "height": 23, "path": "panel.png", "scale": [1, 2], "theme": ["all"] }
+        { "width": 23, "height": 23, "path": "panel.png", "scale": [1, 2], "theme": ["darkest", "dark", "light", "lightest", "all"] }
       ],
       "minimumSize": {
         "width": 260,
