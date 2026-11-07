@@ -221,10 +221,29 @@ int main()
 		};
 		inside(studio::Header(width));
 		inside(studio::Hero(width));
+		const auto help = studio::HelpBox(width);
+		inside(help);
+		CHECK(studio::kHeight <= 640 && !Overlap(help, studio::Hero(width)));
+		CHECK(help.y + help.h <= studio::TabsTop());
+		const auto checkHelp = [&](const std::string& text) {
+			CHECK(!text.empty());
+			const auto lines = studio::WrapHelp(text, help.w, TextWidth);
+			CHECK(lines.size >= 8 && lines.size <= 12);
+			CHECK(TextWidth(lines.first.c_str(), lines.size) <= help.w);
+			if (TextWidth(lines.second.c_str(), lines.size) > help.w) printf("Help overflow at %.0fpx: %s\n", width, text.c_str());
+			CHECK(TextWidth(lines.second.c_str(), lines.size) <= help.w);
+			const std::string shown = lines.first + (lines.second.empty() ? "" : " " + lines.second);
+			CHECK(shown == text || shown == text.substr(0, text.find(". ") + 1));
+			CHECK(28 <= help.h);
+		};
 		CHECK(!Overlap(studio::Header(width), studio::Hero(width)));
 		CHECK((tabs.size() + studio::TabColumns(width) - 1) / studio::TabColumns(width) <= 2);
 		CHECK(studio::TabLabels(width) == (width == 800));
 		for (int t = 0; t < (int)tabs.size(); t++) {
+			CHECK(*studio::TabHelp(tabs[t].label));
+			checkHelp(studio::HelpText(tabs, t, { studio::TabButton, t }, false, false, false));
+			for (bool text : { false, true }) for (bool adjustment : { false, true }) for (bool premiere : { false, true })
+				checkHelp(studio::HelpText(tabs, t, {}, text, adjustment, premiere));
 			const auto button = studio::TabBox(t, width);
 			inside(button);
 			CHECK(button.w >= 28 && button.h >= 32);
@@ -234,6 +253,7 @@ int main()
 			for (int j = 0; j < t; j++) CHECK(!Overlap(button, studio::TabBox(j, width)));
 			CHECK((studio::HitTest(button.x + 2, button.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::TabButton, t }));
 			if (t == 0) for (int i = 0; i < kLookCount; i++) {
+				checkHelp(studio::HelpText(tabs, t, { studio::LookCard, i }, false, false, false));
 				const auto card = studio::LookBox(i, width), thumb = studio::Thumbnail(card);
 				inside(card); inside(thumb);
 				CHECK(TextWidth(kLooks[i].name) <= card.w - 16);
@@ -245,6 +265,8 @@ int main()
 			for (int n = 0; n < (int)tabs[t].rows.size(); n++) {
 				const auto b = studio::RowBox(tabs[t], n, width);
 				const Row& row = kRows[tabs[t].rows[n]];
+				CHECK(*studio::RowHelp(row.id));
+				checkHelp(studio::HelpText(tabs, t, { studio::Control, n }, false, false, false));
 				inside(b);
 				CHECK((studio::HitTest(b.x + 2, b.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::Control, n }));
 				inside(studio::RowSurface(b));
@@ -286,13 +308,20 @@ int main()
 				}
 			}
 			if (t == (int)tabs.size() - 1) for (int i = 0; i < 2; i++) {
+				checkHelp(studio::HelpText(tabs, t, { studio::AboutLink, i }, false, false, false));
 				const auto link = studio::LinkBox(i, width);
 				inside(link);
 				CHECK(TextWidth(i ? "GitHub / Source & updates" : "LinkedIn / CGSudo") <= link.w - 40);
 				CHECK((studio::HitTest(link.x + 2, link.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::AboutLink, i }));
 			}
 		}
+		checkHelp(studio::HelpText(tabs, 0, { studio::Blob, 0 }, false, false, false));
 	}
+	CHECK(!*studio::RowHelp(-1));
+	CHECK(*studio::RowHelp(P_THRESHOLD) && *studio::RowHelp(P_MASK_SOFTNESS) && *studio::RowHelp(P_INVERT));
+	CHECK(*studio::GlassFromHelp());
+	CHECK(std::strcmp(studio::RowHelp(P_SHAPE_LAYER, true), studio::GlassFromHelp()) == 0);
+	CHECK(std::strcmp(studio::RowHelp(P_SHAPE_LAYER), studio::RowHelp(P_SHAPE_LAYER, true)) != 0);
 	CHECK(std::strcmp(studio::BackdropStatus(false, true), "Setting up...") == 0);
 	CHECK(std::strcmp(studio::BackdropStatus(false, false), "Backdrop layer missing - re-apply the effect") == 0);
 	CHECK(std::strcmp(studio::BackdropStatus(true, true), studio::BackdropStatus(true, false)) == 0);

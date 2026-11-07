@@ -1,6 +1,7 @@
 // SDK-free Studio layout and interaction rules keep drawing and hit-testing in agreement.
 #pragma once
 #include "GlassHost.h"
+#include "GlassStudioHelp.h"
 #include <string>
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -75,7 +76,8 @@ inline std::vector<std::string> Items(const char* text)
 	return result;
 }
 inline Box Header(float w) { return { 8, 4, w - 16, 40 }; }
-inline Box Hero(float w) { return { 12, 52, w - 24, 130 }; }
+inline Box Hero(float w) { return { 12, 52, w - 24, 90 }; }
+inline Box HelpBox(float w) { return { 12, 148, w - 24, 34 }; }
 inline Box HeroRenderSize(float w)
 {
 	const auto hero = Hero(w);
@@ -166,6 +168,50 @@ inline Hit HitTest(float x, float y, float w, const std::vector<Tab>& tabs, int 
 inline const char* BackdropStatus(bool helper, bool queued)
 {
 	return helper ? "Live glass - edit your layer to change its outline" : queued ? "Setting up..." : "Backdrop layer missing - re-apply the effect";
+}
+inline std::string HelpText(const std::vector<Tab>& tabs, int active, Hit hover, bool textLayer, bool adjustment, bool premiere)
+{
+	if (hover.type == Control && hover.index >= 0 && hover.index < (int)tabs[active].rows.size()) {
+		const Row& row = kRows[tabs[active].rows[hover.index]];
+		return std::string(row.label) + ": " + RowHelp(row.id, premiere);
+	}
+	if (hover.type == TabButton && hover.index >= 0 && hover.index < (int)tabs.size())
+		return std::string(tabs[hover.index].label) + ": " + TabHelp(tabs[hover.index].label);
+	if (hover.type == LookCard && hover.index >= 0 && hover.index < kLookCount) {
+		const char* help[] = {
+			"Rounded, shiny glass for a liquid look.", "Clear glass for a sharp view of the background.",
+			"Soft blur for hiding busy details behind the glass.", "A soft panel with a thin edge for readable overlays.",
+			"Cool tint and grain for an icy surface.", "Dark glass for a subdued background.",
+			"Strong bending and rainbow edges for a cut-glass look.", "Soft rounded edges for a floating bubble.",
+			"Frost and visible grain for a film texture."
+		};
+		return std::string(kLooks[hover.index].name) + ": " + help[hover.index];
+	}
+	if (hover.type == Blob) return "Material preview: drag the drops together to try Merge without moving your layer.";
+	if (hover.type == AboutLink) return hover.index ? "GitHub: open the source code and check for updates." : "LinkedIn: visit CGSudo's profile.";
+	const char* tip = TabHelp(tabs[active].label);
+	if (textLayer && !std::strcmp(tabs[active].label, "Lens")) tip = RowHelp(P_LIQUID_LETTERS);
+	if (premiere && active == 0) tip = GlassFromHelp();
+	return std::string(tabs[active].label) + (textLayer ? " / Text: " : adjustment ? " / Adjustment: " : " / Layer outline: ") + tip;
+}
+struct HelpLines { std::string first, second; int size = 12; };
+template<class Measure> inline HelpLines WrapHelp(const std::string& text, float width, Measure measure)
+{
+	HelpLines result;
+	for (int size = 12; size >= 8; size--) {
+		result = { text, "", size };
+		if (measure(text.c_str(), size) <= width) return result;
+		size_t split = text.find_last_of(' ');
+		while (split != std::string::npos && measure(text.substr(0, split).c_str(), size) > width)
+			split = split ? text.find_last_of(' ', split - 1) : std::string::npos;
+		if (split == std::string::npos) continue;
+		result.first = text.substr(0, split); result.second = text.substr(split + 1);
+		if (measure(result.second.c_str(), size) <= width) return result;
+	}
+	// The strip promises two lines; retain the complete lead sentence instead of cutting a word.
+	const size_t sentence = text.find(". ");
+	if (sentence != std::string::npos) return WrapHelp(text.substr(0, sentence + 1), width, measure);
+	return result;
 }
 inline bool MatchesLook(int n, const float* core)
 {

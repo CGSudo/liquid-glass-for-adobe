@@ -19,7 +19,7 @@ struct State {
 	Hit hover;
 	Hit pressed;
 	studio::Skin skin;
-	bool textLayer = false, savedText = false, savedLiquid = false;
+	bool textLayer = false, adjustment = false, savedText = false, savedLiquid = false;
 	int letterWidth = 0, letterHeight = 0;
 	std::vector<unsigned char> letters;
 	float bx[2] = { 0.39f, 0.61f }, by[2] = { 0.5f, 0.5f };
@@ -105,6 +105,25 @@ struct Canvas {
 		owned.Reset(image, false);
 		DRAWBOT_PointF32 origin = { ox + x, oy + y };
 		DRAWBOT_ErrorToException(s->surface_suiteP->DrawImage(surface, image, &origin, 1));
+	}
+	void Help(const std::string& text, Box box)
+	{
+		// Drawbot exposes no text metrics; measure the Windows UI font before wrapping.
+		HDC dc = CreateCompatibleDC(nullptr);
+		if (!dc) throw PF_Err_OUT_OF_MEMORY;
+		auto lines = studio::WrapHelp(text, box.w, [&](const char* line, int size) {
+			HFONT font = CreateFontW(-size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+				OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+			if (!font) return box.w + 1;
+			HGDIOBJ old = SelectObject(dc, font);
+			SIZE extent = {};
+			const bool measured = GetTextExtentPoint32A(dc, line, (int)std::strlen(line), &extent) != 0;
+			SelectObject(dc, old); DeleteObject(font);
+			return measured ? (float)extent.cx : box.w + 1;
+		});
+		DeleteDC(dc);
+		Label(lines.first.c_str(), box.x, box.y + 12, Muted, (float)lines.size, box.w);
+		Label(lines.second.c_str(), box.x, box.y + 28, Muted, (float)lines.size, box.w);
 	}
 	void Glass(Box b, bool active = false)
 	{
@@ -230,6 +249,7 @@ static void Core(PF_ParamDef* params[], float* core)
 static std::string Status(PF_InData* in, PF_OutData* out)
 {
 	state.textLayer = false;
+	state.adjustment = false;
 	if (in->appl_id == kAppID_Premiere) return "Glass from needs an adjustment layer and hidden source track";
 	AEFX_SuiteScoper<AEGP_PFInterfaceSuite1> pfi(in, kAEGPPFInterfaceSuite, kAEGPPFInterfaceSuiteVersion1, out);
 	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(in, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, out);
@@ -239,6 +259,7 @@ static std::string Status(PF_InData* in, PF_OutData* out)
 	AEGP_LayerFlags flags = 0;
 	if (pfi->AEGP_GetEffectLayer(in->effect_ref, &layer) || !layer || ls->AEGP_GetLayerObjectType(layer, &type) || ls->AEGP_GetLayerFlags(layer, &flags)) return "Layer status unavailable";
 	state.textLayer = type == AEGP_ObjectType_TEXT;
+	state.adjustment = (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER) != 0;
 	if (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER) return "Adjustment layer - uses input backdrop and Glass shape";
 	if (!OwnLayerType(type, flags) || !HasVideo(in, ls.get(), layer, type)) return "Use a shape, text, footage, solid or pre-comp layer";
 	AEGP_CompH comp = nullptr;
@@ -326,6 +347,7 @@ static PF_Err Draw(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Eve
 			state.pressed.type == Blob ? Text : Green, true);
 	}
 	c.Label(state.textLayer ? "Aa / Material preview" : "Drag the glass / Material preview", 12, 198, Muted, 12, w - 24);
+	c.Help(studio::HelpText(tabs, state.tab, state.hover, state.textLayer, state.adjustment, in->appl_id == kAppID_Premiere), studio::HelpBox(w));
 	if (state.tab == 0) for (int i = 0; i < kLookCount; i++) {
 		Box b = studio::LookBox(i, w);
 		bool active = studio::MatchesLook(i, core), hover = state.hover == Hit{ LookCard, i };
