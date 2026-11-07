@@ -47,7 +47,7 @@ const click = (el) => el.dispatchEvent(new win.Event("click"));
 // Panel and brand.
 assert.deepStrictEqual([...win.document.querySelectorAll("#tabs .tab")].map((t) => t.textContent), ["Glass", "Light", "Shadow", "Finish"]);
 assert(win.document.querySelector("#mark img"), "logo shown");
-assert.strictEqual($("footVersion").textContent, "v0.7.3");
+assert.strictEqual($("footVersion").textContent, "v0.8.0");
 assert.strictEqual([...win.document.querySelectorAll(".param")].filter((r) => !r.title).length, 0, "every setting explains itself");
 click($("brandLink"));
 click($("infoBtn"));

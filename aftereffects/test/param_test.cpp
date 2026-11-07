@@ -2,6 +2,7 @@
 #include "../Source/GlassHost.h"
 #include "../Source/GlassStudioModel.h"
 #include "../Source/GlassPremiere.h"
+#include "../../setup/InstallPaths.h"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -198,6 +199,18 @@ template <class P> static void PremiereCase(PixFmt fmt)
 
 int main()
 {
+	CHECK(setup::SupportedAE(L"24.0") && setup::SupportedAE(L"2026"));
+	CHECK(!setup::SupportedAE(L"23.6") && !setup::SupportedAE(L"2023") && !setup::SupportedAE(L"Beta"));
+	CHECK(!setup::SupportedAE(L"999999999999") && !setup::SupportedAE(L"2026other"));
+	const auto install = setup::NativePlan({ L"X:\\AI" }, { L"X:\\AE" }, L"X:\\Program Files");
+	CHECK(install.copies.size() == 3 && install.obsolete.size() == 7);
+	CHECK(install.obsolete.back() == L"X:\\Program Files\\Adobe\\Common\\Plug-ins\\7.0\\MediaCore\\CGSudo\\LiquidGlass.aex");
+	CHECK(install.copies[1].destination == L"X:\\AE\\Support Files\\Plug-ins\\CGSudo\\LiquidGlass.aex");
+	CHECK(install.copies[2].file == L"LiquidGlassBrightness.aex");
+	for (const auto& path : install.obsolete) {
+		CHECK(path.find(L'*') == std::wstring::npos && path.find(L"CGSudoTest") == std::wstring::npos);
+		CHECK(path.find(L"APPDATA") == std::wstring::npos && path.find(L".a") == path.size() - 4);
+	}
 	PremiereCase<PxBGRA8>(FMT_BGRA8);
 	PremiereCase<PxBGRAF>(FMT_BGRAF);
 	// Studio covers every material row, with shared layout edges and clamped interaction math.

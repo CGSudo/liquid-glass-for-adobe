@@ -2,8 +2,8 @@
 // The window is a Windows 11 acrylic (glass) window showing setup.html in WebView2: a live tour of the looks and one
 // Install button. This file does the installing:
 //   Photoshop:   Adobe's plugin installer (UPIA, part of Creative Cloud) installs the .ccx for the current user.
-//   Illustrator: the .aip is copied into each Illustrator's Plug-ins folder by an elevated copy of this exe
-//                (--copy-aip <file>); Program Files needs admin rights, so Windows asks once.
+//   Illustrator and After Effects: native files go into each app's own Plug-ins folder via --copy-native <payload>.
+//                Program Files needs admin rights, so Windows asks once.
 // Without the WebView2 runtime it asks with a message box and installs the same way. --silent installs with no window.
 #include <windows.h>
 #include <shellapi.h>
@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <atomic>
+#include "InstallPaths.h"
 #include "WebView2.h"
 
 using Microsoft::WRL::Callback;
@@ -30,7 +32,7 @@ static std::wstring gDir; // extracted payload: setup.html, scripts, engine, plu
 static HWND gWnd;
 static ComPtr<ICoreWebView2Controller> gController;
 static ComPtr<ICoreWebView2> gView;
-static bool gBusy;
+static std::atomic<bool> gBusy{ false };
 
 static std::wstring Env(const wchar_t* name)
 {
@@ -51,6 +53,39 @@ static std::vector<std::wstring> AppFolders(const wchar_t* prefix)
 		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) out.push_back(base + fd.cFileName);
 	while (FindNextFileW(h, &fd));
 	FindClose(h);
+	return out;
+}
+
+static bool Exists(const std::wstring& path) { return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES; }
+
+static std::vector<std::wstring> AEFolders()
+{
+	std::vector<std::wstring> out;
+	auto add = [&](std::wstring path) {
+		while (!path.empty() && (path.back() == L'\\' || path.back() == L'/')) path.pop_back();
+		const std::wstring support = L"\\Support Files";
+		if (path.size() >= support.size() && !_wcsicmp(path.c_str() + path.size() - support.size(), support.c_str()))
+			path.resize(path.size() - support.size());
+		if (!Exists(path + L"\\Support Files\\AfterFX.exe")) return;
+		for (const auto& old : out) if (!_wcsicmp(old.c_str(), path.c_str())) return;
+		out.push_back(path);
+	};
+	for (const auto& path : AppFolders(L"Adobe After Effects "))
+		if (setup::SupportedAE(path.substr(path.find_last_of(L'\\') + 1 + wcslen(L"Adobe After Effects ")))) add(path);
+	for (HKEY hive : { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER }) {
+		HKEY key;
+		if (RegOpenKeyExW(hive, L"SOFTWARE\\Adobe\\After Effects", 0, KEY_READ | KEY_WOW64_64KEY, &key) != ERROR_SUCCESS) continue;
+		wchar_t version[256];
+		for (DWORD i = 0, n = 256; RegEnumKeyExW(key, i, version, &n, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS; ++i, n = 256) {
+			if (!setup::SupportedAE(version)) continue;
+			HKEY sub;
+			if (RegOpenKeyExW(key, version, 0, KEY_READ, &sub) != ERROR_SUCCESS) continue;
+			wchar_t value[32768]; DWORD bytes = sizeof value;
+			if (RegGetValueW(sub, nullptr, L"InstallPath", RRF_RT_REG_SZ, nullptr, value, &bytes) == ERROR_SUCCESS) add(value);
+			RegCloseKey(sub);
+		}
+		RegCloseKey(key);
+	}
 	return out;
 }
 
@@ -96,16 +131,75 @@ static std::string ReadAll(const std::wstring& path)
 	return s;
 }
 
-// Elevated part: copy the Illustrator plug-in into every Illustrator. Exit code 0 = all copied.
-static int CopyAip(const std::wstring& src)
+static std::wstring Parent(const std::wstring& path) { return path.substr(0, path.find_last_of(L'\\')); }
+
+static bool AppsOpen()
 {
-	int failed = 0;
-	for (auto& ai : AppFolders(L"Adobe Illustrator ")) {
-		std::wstring dir = ai + L"\\Plug-ins\\Liquid Glass";
-		CreateDirectoryW(dir.c_str(), nullptr);
-		if (!CopyFileW(src.c_str(), (dir + L"\\LiquidGlass.aip").c_str(), FALSE)) failed++;
+	return Running(L"Photoshop.exe") || Running(L"Illustrator.exe") || Running(L"AfterFX.exe") || Running(L"aerender.exe") ||
+		(Exists(Env(L"ProgramFiles") + L"\\Adobe\\Common\\Plug-ins\\7.0\\MediaCore\\CGSudo\\LiquidGlass.aex") && Running(L"Adobe Premiere Pro.exe"));
+}
+
+// Elevated part stages every file before moving old binaries aside; a failed replacement restores the originals.
+static int CopyNative(const std::wstring& payload)
+{
+	if (AppsOpen()) return 10;
+	const auto plan = setup::NativePlan(AppFolders(L"Adobe Illustrator "), AEFolders(), Env(L"ProgramFiles"));
+	const std::wstring suffix = L".lg-setup-" + std::to_wstring(GetCurrentProcessId());
+	std::vector<std::wstring> targets = plan.obsolete, staged, installed, saved;
+	for (const auto& c : plan.copies) targets.push_back(c.destination);
+	// Refuse redirected folders so cleanup cannot escape the detected app's own plug-in tree.
+	for (const auto& path : targets) {
+		for (auto dir = Parent(path); dir.size() > 3; dir = Parent(dir)) {
+			DWORD attrs = GetFileAttributesW(dir.c_str());
+			if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_REPARSE_POINT)) return 11;
+		}
+		DWORD attrs = GetFileAttributesW(path.c_str());
+		if (attrs == INVALID_FILE_ATTRIBUTES) {
+			if (GetLastError() != ERROR_FILE_NOT_FOUND && GetLastError() != ERROR_PATH_NOT_FOUND) return 11;
+			continue;
+		}
+		if (attrs & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_READONLY)) return 11;
+		HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE | DELETE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+		if (f == INVALID_HANDLE_VALUE) return 10;
+		CloseHandle(f);
 	}
-	return failed;
+	bool ok = true;
+	for (const auto& c : plan.copies) {
+		const auto dir = Parent(c.destination), stage = c.destination + suffix + L".new";
+		int made = SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+		if (made != ERROR_SUCCESS && made != ERROR_ALREADY_EXISTS) { ok = false; break; }
+		staged.push_back(stage);
+		if (!CopyFileW((payload + L"\\" + c.file).c_str(), stage.c_str(), TRUE)) { ok = false; break; }
+		const auto source = ReadAll(payload + L"\\" + c.file);
+		if (source.empty() || ReadAll(stage) != source) { ok = false; break; }
+	}
+	if (ok && AppsOpen()) ok = false;
+	if (ok) for (const auto& path : targets) {
+		if (!Exists(path)) continue;
+		if (!MoveFileExW(path.c_str(), (path + suffix).c_str(), MOVEFILE_WRITE_THROUGH)) { ok = false; break; }
+		saved.push_back(path);
+	}
+	if (ok) for (const auto& c : plan.copies) {
+		if (!MoveFileExW((c.destination + suffix + L".new").c_str(), c.destination.c_str(), MOVEFILE_WRITE_THROUGH)) { ok = false; break; }
+		installed.push_back(c.destination);
+	}
+	if (ok) for (const auto& c : plan.copies)
+		if (ReadAll(c.destination) != ReadAll(payload + L"\\" + c.file)) { ok = false; break; }
+	bool restored = true;
+	if (!ok) {
+		for (const auto& path : installed) if (!DeleteFileW(path.c_str())) restored = false;
+		for (auto i = saved.rbegin(); i != saved.rend(); ++i)
+			if (!MoveFileExW((*i + suffix).c_str(), i->c_str(), MOVEFILE_WRITE_THROUGH)) restored = false;
+	}
+	for (const auto& path : staged) DeleteFileW(path.c_str());
+	if (!ok) return restored ? 12 : 13;
+	bool clean = true;
+	for (const auto& path : saved) if (!DeleteFileW((path + suffix).c_str())) clean = false;
+	for (const auto& path : plan.obsolete) {
+		const auto dir = Parent(path);
+		if (dir.substr(dir.find_last_of(L'\\') + 1) != L"Plug-ins") RemoveDirectoryW(dir.c_str()); // only succeeds when empty
+	}
+	return clean ? 0 : 14;
 }
 
 static std::wstring JsonStr(const std::wstring& s)
@@ -126,7 +220,9 @@ static std::wstring StateJson()
 			L",\"running\":" + (Running(exe) ? L"true" : L"false") + L"}";
 	};
 	return L"{\"type\":\"state\",\"version\":\"" LG_VERSION L"\",\"cc\":" + std::wstring(Upia().empty() ? L"false" : L"true") +
-		L",\"ps\":" + app(L"Adobe Photoshop ", L"Photoshop.exe") + L",\"ai\":" + app(L"Adobe Illustrator ", L"Illustrator.exe") + L"}";
+		L",\"ps\":" + app(L"Adobe Photoshop ", L"Photoshop.exe") + L",\"ai\":" + app(L"Adobe Illustrator ", L"Illustrator.exe") +
+		L",\"ae\":{\"found\":" + (AEFolders().empty() ? L"false" : L"true") + L",\"running\":" +
+		((Running(L"AfterFX.exe") || Running(L"aerender.exe")) ? L"true" : L"false") + L"},\"blocked\":" + (AppsOpen() ? L"true" : L"false") + L"}";
 }
 
 // Sends one JSON message to the page (from any thread), or remembers it for the message-box fallback.
@@ -141,52 +237,84 @@ static void Step(const wchar_t* app, const wchar_t* status, const std::wstring& 
 	Tell(L"{\"type\":\"step\",\"app\":\"" + std::wstring(app) + L"\",\"status\":\"" + status + L"\",\"text\":" + JsonStr(text) + L"}");
 }
 
+static bool PhotoshopCopiesRemain()
+{
+	const auto base = Env(L"APPDATA") + L"\\Adobe\\UXP\\Plugins\\External\\";
+	WIN32_FIND_DATAW fd;
+	HANDLE h = FindFirstFileW((base + kPluginId + L"_*").c_str(), &fd);
+	if (h == INVALID_HANDLE_VALUE) return GetLastError() != ERROR_FILE_NOT_FOUND && GetLastError() != ERROR_PATH_NOT_FOUND;
+	bool found = false;
+	do { if (Exists(base + fd.cFileName + L"\\manifest.json")) found = true; } while (!found && FindNextFileW(h, &fd));
+	FindClose(h);
+	return found;
+}
+
 static void Install()
 {
+	const auto ais = AppFolders(L"Adobe Illustrator "), aes = AEFolders();
+	const bool ps = !AppFolders(L"Adobe Photoshop ").empty();
+	auto stop = [&](const std::wstring& why) {
+		if (ps) Step(L"ps", L"fail", why);
+		if (!ais.empty()) Step(L"ai", L"fail", why);
+		if (!aes.empty()) Step(L"ae", L"fail", why);
+		Tell(L"{\"type\":\"finished\"}");
+	};
+	if (AppsOpen()) return stop(L"Close Photoshop, Illustrator and After Effects, including background renders. Close Premiere Pro if an older shared plug-in is installed. Nothing was changed.");
+	if (ps && Upia().empty()) return stop(L"Creative Cloud desktop wasn't found. Install it and run Setup again. Nothing was changed.");
+	// Native preflight and replacement finish before UPIA removes anything from Photoshop.
+	const auto plan = setup::NativePlan(ais, aes, Env(L"ProgramFiles"));
+	bool native = !plan.copies.empty();
+	for (const auto& path : plan.obsolete) native = native || Exists(path);
+	if (native) {
+		if (!ais.empty()) Step(L"ai", L"work", L"Checking files and waiting for Windows permission…");
+		if (!aes.empty()) Step(L"ae", L"work", L"Checking files and waiting for Windows permission…");
+		wchar_t self[MAX_PATH];
+		GetModuleFileNameW(nullptr, self, MAX_PATH);
+		const std::wstring args = L"--copy-native \"" + gDir + L"\"";
+		SHELLEXECUTEINFOW sei{ sizeof sei };
+		sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+		sei.lpVerb = L"runas"; sei.lpFile = self; sei.lpParameters = args.c_str(); sei.hwnd = gWnd; sei.nShow = SW_HIDE;
+		if (!ShellExecuteExW(&sei)) return stop(L"Windows permission was declined. Nothing was changed.");
+		WaitForSingleObject(sei.hProcess, INFINITE);
+		DWORD code = 1;
+		GetExitCodeProcess(sei.hProcess, &code); CloseHandle(sei.hProcess);
+		if (code) {
+			if (code == 10 || code == 11) return stop(L"A plug-in is locked, read-only or in a redirected folder. Close Adobe apps and background renders, check folder permissions, then retry. Nothing was changed.");
+			if (code == 12) return stop(L"Couldn't replace the plug-ins. Original binaries were restored; Photoshop was not changed. Close Adobe apps and retry.");
+			if (code == 13) return stop(L"Replacement and rollback could not finish. Recovery files with .lg-setup- names remain beside the plug-ins. Close Adobe apps and restore these files before retrying. Photoshop was not changed.");
+			if (code == 14) return stop(L"New native plug-ins were copied, but old backup files could not be removed. Close Adobe apps and retry; Photoshop was not changed.");
+			return stop(L"The copy process failed. Close Adobe apps and run Setup again.");
+		}
+		auto verified = [&](const std::wstring& file) {
+			const auto want = ReadAll(gDir + L"\\" + file);
+			for (const auto& c : plan.copies) if (c.file == file && (want.empty() || ReadAll(c.destination) != want)) return false;
+			return true;
+		};
+		if (!ais.empty()) {
+			const bool ok = verified(L"LiquidGlass.aip");
+			Step(L"ai", ok ? L"done" : L"fail", ok ? L"Installed. Effect › Stylize › Liquid Glass…" : L"File verification failed. Close Illustrator and retry.");
+		}
+		if (!aes.empty()) {
+			bool ok = verified(L"LiquidGlass.aex") && verified(L"LiquidGlassBrightness.aex");
+			Step(L"ae", ok ? L"done" : L"fail", ok ? L"Both effects installed. Effects › CGSudo." : L"File verification failed. Close After Effects and retry.");
+		}
+	}
 	// Photoshop: per user, through Creative Cloud's installer. Old copies go first (also the pre-rename "Sudo Liquid Glass"),
 	// because the installer silently keeps an installed plugin with the same version.
-	if (AppFolders(L"Adobe Photoshop ").empty()) Step(L"ps", L"skip", L"Photoshop isn't installed on this PC.");
-	else if (Running(L"Photoshop.exe")) Step(L"ps", L"fail", L"Photoshop is open. Close it, then click Install again.");
-	else if (Upia().empty()) Step(L"ps", L"fail", L"The Creative Cloud desktop app wasn't found. Install it, then run Setup again.");
-	else {
+	if (ps) {
 		Step(L"ps", L"work", L"Installing…");
 		std::wstring u = Upia(), ccx = gDir + L"\\LiquidGlass-for-Adobe.ccx";
 		Run(u, L"/remove \"Sudo Liquid Glass\"");
 		Run(u, L"/remove \"Liquid Glass for Adobe\"");
-		DWORD code = Run(u, L"/install \"" + ccx + L"\"");
 		std::wstring dir = Env(L"APPDATA") + L"\\Adobe\\UXP\\Plugins\\External\\" + kPluginId + L"_" LG_VERSION;
-		if (GetFileAttributesW((dir + L"\\manifest.json").c_str()) != INVALID_FILE_ATTRIBUTES)
+		if (PhotoshopCopiesRemain()) {
+			Step(L"ps", L"fail", L"Creative Cloud couldn't remove the previous copy. Close Photoshop and restart Creative Cloud, then retry.");
+			Tell(L"{\"type\":\"finished\"}"); return;
+		}
+		DWORD code = Run(u, L"/install \"" + ccx + L"\"");
+		if (code == 0 && Exists(dir + L"\\manifest.json") && ReadAll(dir + L"\\index.js") == ReadAll(gDir + L"\\photoshop-index.js"))
 			Step(L"ps", L"done", L"Installed. In Photoshop: Plugins › Liquid Glass for Adobe.");
 		else Step(L"ps", L"fail", L"Adobe's installer stopped with code " + std::to_wstring(int(code)) + L". Restart the Creative Cloud app and try again.");
-	}
-
-	// Illustrator: an elevated copy of this exe copies the plug-in; this side checks the bytes afterwards.
-	auto ais = AppFolders(L"Adobe Illustrator ");
-	if (ais.empty()) Step(L"ai", L"skip", L"Illustrator isn't installed on this PC.");
-	else if (Running(L"Illustrator.exe")) Step(L"ai", L"fail", L"Illustrator is open. Close it, then click Install again.");
-	else {
-		Step(L"ai", L"work", L"Waiting for permission…");
-		wchar_t self[MAX_PATH];
-		GetModuleFileNameW(nullptr, self, MAX_PATH);
-		std::wstring aip = gDir + L"\\LiquidGlass.aip", args = L"--copy-aip \"" + aip + L"\"";
-		SHELLEXECUTEINFOW sei{ sizeof sei };
-		sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-		sei.lpVerb = L"runas";
-		sei.lpFile = self;
-		sei.lpParameters = args.c_str();
-		sei.hwnd = gWnd;
-		sei.nShow = SW_HIDE;
-		if (!ShellExecuteExW(&sei)) Step(L"ai", L"fail", L"Admin permission was declined, so Illustrator wasn't changed.");
-		else {
-			Step(L"ai", L"work", L"Installing…");
-			WaitForSingleObject(sei.hProcess, INFINITE);
-			CloseHandle(sei.hProcess);
-			std::string want = ReadAll(aip);
-			int ok = 0;
-			for (auto& a : ais) ok += !want.empty() && ReadAll(a + L"\\Plug-ins\\Liquid Glass\\LiquidGlass.aip") == want;
-			if (ok == int(ais.size())) Step(L"ai", L"done", L"Installed. In Illustrator: Effect › Stylize › Liquid Glass…");
-			else Step(L"ai", L"fail", L"Couldn't copy the plug-in into Illustrator. Close Illustrator and try again.");
-		}
 	}
 	Tell(L"{\"type\":\"finished\"}");
 }
@@ -195,9 +323,11 @@ static void Install()
 static bool Extract()
 {
 	static const wchar_t* files[] = { L"setup.html", L"glass-worker.js", L"stage.js", L"looks.js", L"engine.js", L"glass_core.wasm", L"logo.png",
-		L"LiquidGlass-for-Adobe.ccx", L"LiquidGlass.aip" };
-	gDir = Env(L"TEMP") + L"\\LiquidGlassSetup-" + std::to_wstring(GetCurrentProcessId());
-	CreateDirectoryW(gDir.c_str(), nullptr);
+		L"LiquidGlass-for-Adobe.ccx", L"LiquidGlass.aip", L"LiquidGlass.aex", L"LiquidGlassBrightness.aex", L"photoshop-index.js" };
+	const auto temp = Env(L"TEMP");
+	if (temp.empty()) return false;
+	gDir = temp + L"\\LiquidGlassSetup-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64());
+	if (!CreateDirectoryW(gDir.c_str(), nullptr)) return false;
 	int id = 101;
 	for (auto name : files) {
 		HRSRC r = FindResourceW(nullptr, MAKEINTRESOURCEW(id++), RT_RCDATA);
@@ -215,6 +345,7 @@ static bool Extract()
 
 static void Cleanup()
 {
+	if (gDir.empty() || Parent(gDir) != Env(L"TEMP") || (GetFileAttributesW(gDir.c_str()) & FILE_ATTRIBUTE_REPARSE_POINT)) return;
 	std::wstring from = gDir + L'\0'; // double-NUL terminated for SHFileOperation
 	SHFILEOPSTRUCTW op{ nullptr, FO_DELETE, from.c_str(), nullptr, FOF_NO_UI };
 	SHFileOperationW(&op);
@@ -308,7 +439,8 @@ static std::wstring Summary(const std::vector<std::wstring>& log)
 	for (auto& j : log) {
 		size_t t = j.find(L"\"text\":\"");
 		if (t == std::wstring::npos || j.find(L"\"status\":\"work\"") != std::wstring::npos) continue;
-		s += (j.find(L"\"app\":\"ps\"") != std::wstring::npos ? L"Photoshop: " : L"Illustrator: ") + j.substr(t + 8, j.size() - t - 10) + L"\n\n";
+		s += (j.find(L"\"app\":\"ps\"") != std::wstring::npos ? L"Photoshop: " :
+			j.find(L"\"app\":\"ae\"") != std::wstring::npos ? L"After Effects: " : L"Illustrator: ") + j.substr(t + 8, j.size() - t - 10) + L"\n\n";
 	}
 	return s;
 }
@@ -317,7 +449,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show)
 {
 	int argc = 0;
 	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	if (argc == 3 && !wcscmp(argv[1], L"--copy-aip")) return CopyAip(argv[2]);
+	if (argc == 3 && !wcscmp(argv[1], L"--copy-native")) return CopyNative(argv[2]);
 
 	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 	CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -345,9 +477,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show)
 	wc.lpszClassName = L"LiquidGlassForAdobeSetup";
 	RegisterClassW(&wc);
 	UINT dpi = GetDpiForSystem();
-	int cw = MulDiv(920, dpi, 96), ch = MulDiv(600, dpi, 96);
+	int cw = MulDiv(1040, dpi, 96), ch = MulDiv(740, dpi, 96);
 	RECT wa;
 	SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
+	if (cw > wa.right - wa.left - 24) cw = wa.right - wa.left - 24;
+	if (ch > wa.bottom - wa.top - 24) ch = wa.bottom - wa.top - 24;
 	gWnd = CreateWindowExW(0, wc.lpszClassName, (std::wstring(kName) + L" " LG_VERSION L" Setup").c_str(),
 		WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, wa.left + (wa.right - wa.left - cw) / 2,
 		wa.top + (wa.bottom - wa.top - ch) / 2, cw, ch, nullptr, nullptr, inst, nullptr);
@@ -379,7 +513,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show)
 
 	if (gNoView) {
 		// No WebView2 runtime (rare: it ships with Windows 11 and current Windows 10): plain dialogs, same install.
-		if (MessageBoxW(nullptr, L"Install Liquid Glass for Adobe into Photoshop and Illustrator?\n\nClose both apps first.", kName,
+		if (MessageBoxW(nullptr, L"Install Liquid Glass for Adobe into detected Photoshop, Illustrator and After Effects 2024+?\n\nClose Adobe apps and background renders first. Presets and saved looks are kept.", kName,
 			MB_OKCANCEL | MB_ICONQUESTION) == IDOK) {
 			std::vector<std::wstring> log;
 			gLog = &log;
