@@ -136,6 +136,10 @@ template <class P> static void MaskAndTintCase(PixFmt fmt)
 	s.invertMask = true;
 	CHECK(RenderFrame(fmt, s, in.world, clear.world, nullptr, nullptr, sc, &backdrop.world) == 0);
 	CHECK(PixelAt<P>(clear.world, 12, 33)[P::A] == typename P::Chan(P::Max));
+	s.noGlass = true;
+	PixelAt<P>(in.world, 12, 33)[P::A] = FromUnit<P>(0.25f);
+	CHECK(RenderFrame(fmt, s, in.world, clear.world, nullptr, nullptr, sc) == 0);
+	CHECK(clear.px == in.px);
 }
 
 template <class P> static void PremiereCase(PixFmt fmt)
@@ -600,6 +604,13 @@ int main()
 	ScaleToBuffer(half, 0.5f);
 	CHECK(half.core[3] == 8 && half.core[5] == 1.5f && half.core[14] == 12 && half.core[2] == 80 && half.core[1] == 0.75f);
 	CHECK(half.shape[0].w == 25);
+	Settings reach = Base(100, 100);
+	reach.ownLayer = true;
+	reach.core[3] = 80; reach.core[2] = 200;
+	CHECK(RenderMargin(reach) == Margin(reach.core, 1) + 12);
+	ScaleToBuffer(reach, 0.5f);
+	CHECK(RenderMargin(reach) == Margin(reach.core, 1) + 6);
+	CHECK(RenderMargin(reach) > Margin(reach.core, 0.5f) + 6);
 
 	// Light turns toward the direction of travel; a still glass keeps its own angle.
 	CHECK(FollowLight(-45, 0, 0, 1) == -45);

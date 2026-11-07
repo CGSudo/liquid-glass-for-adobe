@@ -76,8 +76,9 @@ static bool OwnLayerType(AEGP_ObjectType type, AEGP_LayerFlags flags)
 
 static bool HasVideo(const PF_InData* in, const AEGP_LayerSuite9* ls, AEGP_LayerH layer, AEGP_ObjectType type)
 {
+	PF_OutData suiteOut = {};
 	if (type != AEGP_ObjectType_AV) return type == AEGP_ObjectType_VECTOR || type == AEGP_ObjectType_TEXT;
-	AEFX_SuiteScoper<AEGP_ItemSuite9> items(in, kAEGPItemSuite, kAEGPItemSuiteVersion9, nullptr);
+	AEFX_SuiteScoper<AEGP_ItemSuite9> items(in, kAEGPItemSuite, kAEGPItemSuiteVersion9, &suiteOut);
 	AEGP_ItemH source = nullptr;
 	AEGP_ItemFlags flags = 0;
 	return !ls->AEGP_GetLayerSourceItem(layer, &source) && source && !items->AEGP_GetItemFlags(source, &flags) && (flags & AEGP_ItemFlag_HAS_VIDEO);
@@ -86,8 +87,9 @@ static bool HasVideo(const PF_InData* in, const AEGP_LayerSuite9* ls, AEGP_Layer
 static bool ReadBackdropMap(PF_InData* in, const AEGP_PFInterfaceSuite1* pfi, const AEGP_LayerSuite9* ls,
 	AEGP_LayerH layer, AEGP_ObjectType type, AEGP_LayerFlags flags, const A_Time& time, double map[3][3])
 {
+	PF_OutData suiteOut = {};
 	if (type != AEGP_ObjectType_AV) return true; // shape and text have already been transformed before effects
-	AEFX_SuiteScoper<AEGP_ItemSuite9> items(in, kAEGPItemSuite, kAEGPItemSuiteVersion9, nullptr);
+	AEFX_SuiteScoper<AEGP_ItemSuite9> items(in, kAEGPItemSuite, kAEGPItemSuiteVersion9, &suiteOut);
 	AEGP_ItemH source = nullptr;
 	AEGP_ItemType sourceType = AEGP_ItemType_NONE;
 	if (ls->AEGP_GetLayerSourceItem(layer, &source) || !source || items->AEGP_GetItemType(source, &sourceType)) return false;
@@ -100,7 +102,7 @@ static bool ReadBackdropMap(PF_InData* in, const AEGP_PFInterfaceSuite1* pfi, co
 		BackdropMap(layerMatrix.mat, dx, dy, map);
 		return true;
 	}
-	AEFX_SuiteScoper<AEGP_CompSuite13> comps(in, kAEGPCompSuite, kAEGPCompSuiteVersion13, nullptr);
+	AEFX_SuiteScoper<AEGP_CompSuite13> comps(in, kAEGPCompSuite, kAEGPCompSuiteVersion13, &suiteOut);
 	AEGP_CompH comp = nullptr;
 	AEGP_ItemH compItem = nullptr;
 	A_long width = 0, height = 0;
@@ -110,13 +112,13 @@ static bool ReadBackdropMap(PF_InData* in, const AEGP_PFInterfaceSuite1* pfi, co
 	A_FpLong zoom = 0;
 	if (pfi->AEGP_GetEffectCamera(in->effect_ref, &time, &camera)) return false;
 	if (camera) {
-		AEFX_SuiteScoper<AEGP_StreamSuite7> streams(in, kAEGPStreamSuite, kAEGPStreamSuiteVersion7, nullptr);
+		AEFX_SuiteScoper<AEGP_StreamSuite7> streams(in, kAEGPStreamSuite, kAEGPStreamSuiteVersion7, &suiteOut);
 		AEGP_StreamVal2 value = {};
 		if (ls->AEGP_GetLayerToWorldXform(camera, &time, &cameraMatrix) ||
 			streams->AEGP_GetLayerStreamValue(camera, AEGP_LayerStream_ZOOM, AEGP_LTimeMode_CompTime, &time, FALSE, &value, nullptr)) return false;
 		zoom = value.one_d;
 	} else {
-		AEFX_SuiteScoper<AEGP_CameraSuite2> cameras(in, kAEGPCameraSuite, kAEGPCameraSuiteVersion2, nullptr);
+		AEFX_SuiteScoper<AEGP_CameraSuite2> cameras(in, kAEGPCameraSuite, kAEGPCameraSuiteVersion2, &suiteOut);
 		if (cameras->AEGP_GetDefaultCameraDistanceToImagePlane(comp, &zoom)) return false;
 		for (int i = 0; i < 4; i++) cameraMatrix.mat[i][i] = 1;
 		cameraMatrix.mat[3][0] = width * 0.5;
@@ -201,12 +203,13 @@ static std::vector<NewGlass> gNewGlass;
 // Hides the built-in shape controls of this effect on the layer: they mean nothing when the layer itself is the shape.
 static void HideShapeControls(const PF_InData* in_data, AEGP_LayerH layer)
 {
-	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(in_data, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, nullptr);
+	PF_OutData suiteOut = {};
+	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(in_data, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, &suiteOut);
 	AEGP_ObjectType type = AEGP_ObjectType_NONE;
 	ls->AEGP_GetLayerObjectType(layer, &type);
-	AEFX_SuiteScoper<AEGP_EffectSuite5> fx(in_data, kAEGPEffectSuite, kAEGPEffectSuiteVersion5, nullptr);
-	AEFX_SuiteScoper<AEGP_StreamSuite7> ss(in_data, kAEGPStreamSuite, kAEGPStreamSuiteVersion7, nullptr);
-	AEFX_SuiteScoper<AEGP_DynamicStreamSuite4> ds(in_data, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4, nullptr);
+	AEFX_SuiteScoper<AEGP_EffectSuite5> fx(in_data, kAEGPEffectSuite, kAEGPEffectSuiteVersion5, &suiteOut);
+	AEFX_SuiteScoper<AEGP_StreamSuite7> ss(in_data, kAEGPStreamSuite, kAEGPStreamSuiteVersion7, &suiteOut);
+	AEFX_SuiteScoper<AEGP_DynamicStreamSuite4> ds(in_data, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4, &suiteOut);
 	A_long effects = 0;
 	if (fx->AEGP_GetLayerNumEffects(layer, &effects)) return;
 	for (A_long i = 0; i < effects; i++) {
@@ -234,17 +237,18 @@ static void HideShapeControls(const PF_InData* in_data, AEGP_LayerH layer)
 
 // Nothing else is running here, so changing the project is safe. Ids, not handles: the layer may be gone by now (undo, project closed).
 static A_Err OnIdle(AEGP_GlobalRefcon, AEGP_IdleRefcon, A_long*)
-{
+try {
 	if (gNewGlass.empty() || !gBasic) return A_Err_NONE;
 	const std::vector<NewGlass> todo = std::move(gNewGlass);
 	gNewGlass.clear();
 	PF_InData host = {}; // the suite helpers only read the suite pointer from it
+	PF_OutData suiteOut = {};
 	host.pica_basicP = gBasic;
-	AEFX_SuiteScoper<AEGP_ProjSuite6> ps(&host, kAEGPProjSuite, kAEGPProjSuiteVersion6, nullptr);
-	AEFX_SuiteScoper<AEGP_ItemSuite9> is(&host, kAEGPItemSuite, kAEGPItemSuiteVersion9, nullptr);
-	AEFX_SuiteScoper<AEGP_CompSuite13> cs(&host, kAEGPCompSuite, kAEGPCompSuiteVersion13, nullptr);
-	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(&host, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, nullptr);
-	AEFX_SuiteScoper<AEGP_MemorySuite1> mem(&host, kAEGPMemorySuite, kAEGPMemorySuiteVersion1, nullptr);
+	AEFX_SuiteScoper<AEGP_ProjSuite6> ps(&host, kAEGPProjSuite, kAEGPProjSuiteVersion6, &suiteOut);
+	AEFX_SuiteScoper<AEGP_ItemSuite9> is(&host, kAEGPItemSuite, kAEGPItemSuiteVersion9, &suiteOut);
+	AEFX_SuiteScoper<AEGP_CompSuite13> cs(&host, kAEGPCompSuite, kAEGPCompSuiteVersion13, &suiteOut);
+	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(&host, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, &suiteOut);
+	AEFX_SuiteScoper<AEGP_MemorySuite1> mem(&host, kAEGPMemorySuite, kAEGPMemorySuiteVersion1, &suiteOut);
 	AEGP_ProjectH project = nullptr;
 	if (ps->AEGP_GetProjectByIndex(0, &project) || !project) return A_Err_NONE;
 	for (const NewGlass& g : todo) {
@@ -269,9 +273,13 @@ static A_Err OnIdle(AEGP_GlobalRefcon, AEGP_IdleRefcon, A_long*)
 		AEGP_LayerH below = nullptr;
 		if (ls->AEGP_GetLayerIndex(layer, &at) || ls->AEGP_GetCompNumLayers(comp, &count)) continue;
 		if (at + 1 < count && !ls->AEGP_GetCompLayerByIndex(comp, at + 1, &below) && below && IsBackdropLayer(ls.get(), mem.get(), below)) continue;
-		MakeBackdropLayer(&host, nullptr, ls.get(), comp, layer);
+		MakeBackdropLayer(&host, &suiteOut, ls.get(), comp, layer);
 	}
 	return A_Err_NONE;
+} catch (PF_Err& e) {
+	return e;
+} catch (...) {
+	return PF_Err_OUT_OF_MEMORY;
 }
 
 // Only notes the layer. From inside this call a script locks up the script engine, touching the effect's streams stalls, and a
@@ -516,6 +524,7 @@ static PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data, PF_Para
 // null in a smart render, which has none.
 static PF_Err ReadSettings(PF_InData* in_data, PF_ParamDef* params[], Settings& s)
 {
+	PF_OutData suiteOut = {};
 	PF_Err err = PF_Err_NONE, err2 = PF_Err_NONE;
 	std::copy(kDefaults, kDefaults + kCoreCount, s.core);
 	const float ds = Ratio(in_data->downsample_x);
@@ -542,7 +551,7 @@ static PF_Err ReadSettings(PF_InData* in_data, PF_ParamDef* params[], Settings& 
 			s.core[r.core + 1] = d.u.cd.value.green / 255.f;
 			s.core[r.core + 2] = d.u.cd.value.blue / 255.f;
 			if (in_data->appl_id != kAppID_Premiere) {
-				AEFX_SuiteScoper<PF_ColorParamSuite1> colors(in_data, kPFColorParamSuite, kPFColorParamSuiteVersion1, nullptr);
+				AEFX_SuiteScoper<PF_ColorParamSuite1> colors(in_data, kPFColorParamSuite, kPFColorParamSuiteVersion1, &suiteOut);
 				PF_PixelFloat color = {};
 				ERR(colors->PF_GetFloatingPointColorFromColorDef(in_data->effect_ref, &d, &color));
 				if (!err) {
@@ -635,7 +644,7 @@ static PF_LRect ToLRect(const Rect& r)
 }
 static Rect FromLRect(const PF_LRect& r) { return { r.left, r.top, r.right, r.bottom }; }
 
-static void DeleteSettings(void* p) { delete static_cast<Settings*>(p); }
+static void DeleteSettings(void* p) noexcept { delete static_cast<Settings*>(p); }
 
 static PF_Err SmartPreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extra)
 {
@@ -661,7 +670,7 @@ static PF_Err SmartPreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRen
 	s.noGlass = under.unsupported || (under.ownLayer && !under.ok);
 	if (s.noGlass) s.clipAlpha = false;
 	const Rect request = FromLRect(extra->input->output_request.rect);
-	const int margin = Margin(s.core, Ratio(in_data->downsample_x)) + (MergeParts(s) ? (int)std::ceil(s.core[20] * 0.5f) : 0);
+	const int margin = RenderMargin(s);
 	PF_RenderRequest req = extra->input->output_request;
 	req.channel_mask = PF_ChannelMask_ARGB;
 	req.rect = ToLRect(Grow(request, margin)); // the lens and the frost read past the requested area
@@ -747,8 +756,9 @@ static PF_Err SmartRender(PF_InData* in_data, PF_OutData* out_data, PF_SmartRend
 	ERR(extra->cb->checkout_output(in_data->effect_ref, &out));
 	if (!err && out) {
 		UnderFrame under(in_data, out_data);
-		if (s.ownLayer && !under.ok) return PF_Err_INTERNAL_STRUCT_DAMAGED; // was there in pre-render
-		err = Draw(in_data, out_data, s, in, out, shape, back, true, under.ok ? &under.world : nullptr);
+		Settings renderSettings = s;
+		if (s.ownLayer && !under.ok) renderSettings.noGlass = true;
+		err = Draw(in_data, out_data, renderSettings, in, out, shape, back, true, under.ok ? &under.world : nullptr);
 	}
 	return err;
 }
@@ -820,11 +830,15 @@ static PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* para
 }
 
 extern "C" DllExport PF_Err PluginDataEntryFunction2(PF_PluginDataPtr inPtr, PF_PluginDataCB2 inPluginDataCallBackPtr, SPBasicSuite*, const char*, const char*)
-{
+try {
 	PF_Err result = PF_Err_INVALID_CALLBACK;
 	result = PF_REGISTER_EFFECT_EXT2(inPtr, inPluginDataCallBackPtr, LG_NAME, LG_MATCH, "CGSudo", AE_RESERVED_INFO, "EffectMain",
 		"https://github.com/CGSudo/liquid-glass-for-adobe");
 	return result;
+} catch (PF_Err& e) {
+	return e;
+} catch (...) {
+	return PF_Err_OUT_OF_MEMORY;
 }
 
 extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_LayerDef* output, void* extra)

@@ -332,6 +332,12 @@ inline int Margin(const float* p, float ds)
 	return (int)std::ceil(std::max({ depth, lens, shadow, dim }) + p[5] * 2) + 4;
 }
 
+// Settings already contain buffer-scaled lengths in both pre-render and render.
+inline int RenderMargin(const Settings& s)
+{
+	return Margin(s.core, 1) + (MergeParts(s) ? (int)std::ceil(s.core[20] * 0.5f) : 0);
+}
+
 inline Rect ShapeBounds(const Shape& s, float grow)
 {
 	if (s.w <= 0 || s.h <= 0) return {};
@@ -623,7 +629,7 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 	const World* alpha = shapeLayer ? shapeLayer : (s.ownLayer || s.clipAlpha) ? &in : nullptr;
 	const Rect bounds = alpha ? AlphaBounds<P>(*alpha) : BuiltInBounds(s);
 	if (bounds.empty()) return 0;
-	const int margin = Margin(s.core, 1) + (MergeParts(s) ? (int)std::ceil(s.core[20] * 0.5f) : 0);
+	const int margin = RenderMargin(s);
 	// Buffer reaches `margin` past the frame so a shape cut by the frame edge has no false edge there.
 	const Rect roi = Clip(Grow(bounds, margin), Grow(outR, margin));
 	if (roi.empty() || Clip(roi, outR).empty()) return 0;
