@@ -10,8 +10,8 @@ resource 'PiPL' (16000) {
 		CodeWin64X86 { "EffectMain" },
 		AE_PiPL_Version { 2, 0 },
 		AE_Effect_Spec_Version { PF_PLUG_IN_VERSION, PF_PLUG_IN_SUBVERS },
-		/* PF_VERSION(1, 0, 0, PF_Stage_RELEASE, 0), must match GlobalSetup */
-		AE_Effect_Version { 525824 },
+		/* PF_VERSION(0, 8, 0, PF_Stage_RELEASE, 0), must match GlobalSetup */
+		AE_Effect_Version { 263680 },
 		AE_Effect_Info_Flags { 0 },
 		/* DEEP_COLOR_AWARE | I_EXPAND_BUFFER | CUSTOM_UI, must match GlobalSetup */
 		AE_Effect_Global_OutFlags { 0x02008200 },

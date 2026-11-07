@@ -19,7 +19,7 @@
 #include "LiquidGlassNames.h"
 #include "GlassPremiereSDK.h"
 
-enum { MAJOR = 1, MINOR = 0, BUG = 0, BUILD = 0 };
+enum { MAJOR = 0, MINOR = 8, BUG = 0, BUILD = 0 };
 static AEGP_PluginID gPlugin = 0; // both written once in GLOBAL_SETUP, before any render thread exists
 static SPBasicSuite* gBasic = nullptr;
 
