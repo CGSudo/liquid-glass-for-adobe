@@ -1,8 +1,8 @@
-# Liquid Glass for Adobe: Apple's Liquid Glass effect for Photoshop and Illustrator (free plugin)
+# Liquid Glass for Adobe: Apple's Liquid Glass effect for After Effects, Photoshop and Illustrator (free plugin)
 
 **Stop faking glass. Make it real, keep it live.**
 
-**Liquid Glass for Adobe** (by CGSudo) is a free, open-source plugin that recreates Apple's **Liquid Glass** material from **iOS 26** and **macOS Tahoe** inside **Adobe Photoshop** and **Adobe Illustrator**. Your own shapes and text become real, refracting glass in one click. Nothing gets merged or flattened, and the glass re-renders whenever anything behind it changes.
+**Liquid Glass for Adobe** (by CGSudo) is a free, open-source plugin that recreates Apple's **Liquid Glass** material from **iOS 26** and **macOS Tahoe** inside **After Effects, Photoshop and Illustrator**. Your own shapes and text become real, refracting glass in one click. Nothing gets merged or flattened, and the glass re-renders whenever anything behind it changes.
 
 > One click. Real refraction. Zero flattened layers.
 
@@ -15,7 +15,7 @@ Get everything from the **[latest release](../../releases/latest)**:
 
 | You want | Download | Works on |
 |---|---|---|
-| **Everything, one click** (Photoshop + Illustrator) | `LiquidGlass-for-Adobe-<version>-Setup.exe` | Windows 10 / 11 |
+| **Everything, one click** (Photoshop + Illustrator + After Effects) | `LiquidGlass-for-Adobe-<version>-Setup.exe` | Windows 10 / 11 |
 | **Everything for Windows and Mac** in one zip | `LiquidGlass-for-Adobe-<version>-AIO-Windows-Mac.zip` | Windows + macOS |
 | **Photoshop only** | `LiquidGlass-for-Adobe-Photoshop-<version>.ccx` | Windows + macOS |
 | **Illustrator only** | `LiquidGlass-for-Adobe-Illustrator-<version>-Windows.zip` | Windows |
@@ -32,13 +32,20 @@ Get everything from the **[latest release](../../releases/latest)**:
 > - Setup isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC": click **More info › Run anyway**.
 
 ## Install
-- **Windows (both apps):** close Photoshop and Illustrator, run `LiquidGlass-for-Adobe-<version>-Setup.exe` and click **Install**. Windows asks once for permission (Illustrator's Plug-ins folder needs it). Setup installs into every Photoshop and Illustrator it finds. IT admins: `Setup.exe --silent`.
+- **Windows (three apps):** close Photoshop, Illustrator and After Effects, run `LiquidGlass-for-Adobe-<version>-Setup.exe` and click **Install**. Windows asks once for permission (Illustrator's Plug-ins folder needs it). Setup installs the supported plugins. IT admins: `Setup.exe --silent`.
 - **Mac or Photoshop only:** double-click `LiquidGlass-for-Adobe-Photoshop-<version>.ccx`. The Creative Cloud desktop app installs it.
 - **Illustrator only, by hand:** unzip and copy `LiquidGlass.aip` into `C:\Program Files\Adobe\Adobe Illustrator <version>\Plug-ins\Liquid Glass\`.
 
 Then: **Photoshop › Plugins › Liquid Glass for Adobe**, or in Illustrator select a shape and choose **Effect › Stylize › Liquid Glass…**.
 
 Needs Photoshop 2023 (v24.2) or newer, or Illustrator 2026, and the Creative Cloud desktop app for Photoshop plugins.
+
+## After Effects in 30 seconds
+1. Apply **Effects ? CGSudo ? Liquid Glass** to a shape, text, image, footage or pre-comp above your artwork. The layer?s alpha becomes glass; its colour is ignored and the backdrop is automatic.
+2. Open **Glass Studio** in Effect Controls. Choose a look and keyframe tint, frost, lens, light, shadow, glow, stroke or grain. Shapes merge; letters stay separate unless **Liquid letters** is on.
+3. Try **Liquid Glass Brightness** to build glass from a layer?s brightness.
+
+After Effects 2026 is tested on Windows. Premiere Pro is coming; Illustrator for Mac is planned.
 
 ## Why designers switch
 - **"I re-did that glass five times today."** The glass reads what's behind it on every change. Move the photo, edit the text, nudge the shape: the glass catches up by itself.
@@ -105,7 +112,8 @@ Select a shape, group or text and choose **Effect › Stylize › Liquid Glass�
 - [x] **Photoshop** (Windows and macOS): available
 - [x] **Illustrator** (Windows): available
 - [ ] **Illustrator for Mac**: planned
-- [ ] **After Effects** and **Premiere Pro** (Windows): built from source and tested in both 2026 apps, not in a release yet. See [aftereffects/README.md](aftereffects/README.md)
+- [x] **After Effects 2026** (Windows): available; see [aftereffects/README.md](aftereffects/README.md)
+- [ ] **Premiere Pro**: coming
 - [ ] GPU rendering, linear-light blending, light/dark adaptive tint
 
 ## How it works
@@ -114,8 +122,8 @@ core/        Rust renderer (glass_core): backdrop + shape masks → glass layer 
 photoshop/   UXP plugin: panel, live updates, vector and text outline reader, WebAssembly bridge;
              looks.js (defaults, looks and icons) is shared with Illustrator and Setup
 illustrator/ native Live Effect (C++, Illustrator SDK) with a WebView2 settings window
-aftereffects/ one native effect for After Effects and Premiere Pro (C++, After Effects SDK), not released yet
-setup/       the Windows Setup.exe: glass window, live tour of the looks, one-click install of both plugins
+aftereffects/ native After Effects effects (C++, After Effects SDK); Premiere support in progress
+setup/       the Windows Setup.exe: glass window, live tour of the looks, one-click Windows install
 preview/     renders the preview images from test shapes
 docs/        project website (GitHub Pages) and the full project history
 ```
@@ -144,7 +152,7 @@ Package as `dist/LiquidGlass-for-Adobe.ccx` and install with `powershell -Execut
 
 **After Effects and Premiere Pro (Windows):** needs Visual Studio C++ Build Tools and the [After Effects SDK](https://developer.adobe.com/console). See [aftereffects/README.md](aftereffects/README.md).
 
-**Setup.exe and every release file:** `powershell -ExecutionPolicy Bypass -File release.ps1` builds both plugins, Setup.exe and all downloads into `dist/release`.
+**Setup.exe and every release file:** `powershell -ExecutionPolicy Bypass -File release.ps1` builds the plugins, Setup.exe and all downloads into `dist/release`.
 
 ## Known limits
 - RGB documents only in Photoshop; Illustrator works in RGB and warns in CMYK documents.

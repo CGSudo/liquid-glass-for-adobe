@@ -1,10 +1,12 @@
 # Liquid Glass for Adobe
 
-> Free, open-source plugin by CGSudo that recreates Apple's iOS 26 / macOS Tahoe "Liquid Glass" material in Adobe Photoshop and Adobe Illustrator. Shapes and text become real, refracting, live glass in one click; nothing is flattened.
+> Free, open-source plugin by CGSudo that recreates Apple's iOS 26 / macOS Tahoe "Liquid Glass" material in After Effects, Photoshop and Illustrator. Shapes and text become real, refracting, live glass in one click; nothing is flattened.
 
 - Photoshop: UXP plugin (.ccx), Windows and macOS, Photoshop 2023 (v24.2) or newer. Use: select shape or text layers, Plugins > Liquid Glass for Adobe > Make Glass.
 - Illustrator: native Live Effect (.aip), Windows, Illustrator 2026. Use: Effect > Stylize > Liquid Glass.
-- Windows Setup.exe installs into both apps in one click; Mac users double-click the .ccx.
+- After Effects 2026: Windows, tested on Windows. Apply Effects > CGSudo > Liquid Glass to a shape, text, image, footage or pre-comp; alpha defines glass and the backdrop is automatic. Glass Studio offers live preview and keyframeable controls. Liquid Glass Brightness uses layer brightness.
+- Premiere Pro: coming, not released. Illustrator for Mac: planned. Photoshop on macOS has not been tested.
+- Windows Setup.exe installs all three apps; Mac users double-click the .ccx. Setup is unsigned and may trigger SmartScreen.
 - 9 looks: Liquid Glass, Clear, Frosted, Glassmorphism, Ice, Smoked, Crystal, Bubble, Film frost. Saved custom looks.
 - Real optics: refraction, dispersion (rainbow edge), frost, tint, rim lights, bevel, inner glow, stroke, drop shadow, liquid merge of nearby shapes.
 - Engine: Rust (WebAssembly in Photoshop, native in Illustrator). License: MIT. Independent; not made by Adobe or Apple.
