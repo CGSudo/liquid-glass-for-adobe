@@ -31,7 +31,8 @@ for (const s of sliders) {
   if (header.includes(`K_ANGLE, ${s.core}, "${s.label}"`)) continue; // an angle dial covers the panel's -180..180 slider
   assert.ok(r, `no row for param ${s.core} (${s.label})`);
   assert.deepStrictEqual({ label: r.label, min: r.min, max: r.max }, { label: s.label, min: s.min, max: s.max }, `param ${s.core}`);
-  assert.strictEqual(r.dflt, DEFAULTS[s.core], `default of param ${s.core}`);
+  const hostDefaults = { 3: 30, 13: 0.25 }; // this host starts with a stronger edge and a shadow; looks stay the same
+  assert.strictEqual(r.dflt, hostDefaults[s.core] ?? DEFAULTS[s.core], `default of param ${s.core}`);
 }
 
 // Every one of the 42 values has a control (sliders + dials + colours + popups).

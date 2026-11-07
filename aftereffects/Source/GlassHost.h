@@ -121,7 +121,7 @@ const Row kRows[] = {
 	{ P_T_QUICK, K_TOPIC, -1, "Quick adjust", 0, 0, 0, 0, nullptr },
 	{ P_FROST, K_FLOAT, 5, "Frost", 0, 200, 3, 0, nullptr },
 	{ P_LENS, K_FLOAT, 2, "Lens", 0, 200, 80, 0, nullptr },
-	{ P_EDGE, K_FLOAT, 3, "Edge width", 1, 300, 16, 0, nullptr },
+	{ P_EDGE, K_FLOAT, 3, "Edge width", 1, 300, 30, 0, nullptr }, // starts stronger than the panel (params.test.js): on a video frame 16 barely shows
 	{ P_SHINE, K_FLOAT, 1, "Shine", 0, 1, 0.75f, 2, nullptr },
 	{ P_E_QUICK, K_END, -1, nullptr, 0, 0, 0, 0, nullptr },
 
@@ -144,7 +144,7 @@ const Row kRows[] = {
 	{ P_E_COLOUR, K_END, -1, nullptr, 0, 0, 0, 0, nullptr },
 
 	{ P_T_SHADOW, K_TOPIC, -1, "Drop shadow", 0, 0, 0, 0, nullptr },
-	{ P_SH_DARK, K_FLOAT, 13, "Darkness", 0, 1, 0, 2, nullptr },
+	{ P_SH_DARK, K_FLOAT, 13, "Darkness", 0, 1, 0.25f, 2, nullptr }, // likewise
 	{ P_SH_SOFT, K_FLOAT, 14, "Softness", 0, 100, 24, 0, nullptr },
 	{ P_SH_DROP, K_FLOAT, 15, "Drop", -50, 50, 8, 0, nullptr },
 	{ P_E_SHADOW, K_END, -1, nullptr, 0, 0, 0, 0, nullptr },
@@ -211,6 +211,8 @@ struct Settings {
 	float core[kCoreCount];
 	Shape shape[2];
 	bool second = false, clipAlpha = false, follow = false;
+	bool noGlass = false; // the input passes through untouched
+	bool ownLayer = false; // on the user's shape or text layer: its alpha is the outline, and separate parts fuse
 	float wobble = 0, wobbleSpeed = 1, seconds = 0;
 };
 
@@ -297,7 +299,8 @@ inline float ShapeDistance(const Shape& s, float c, float sn, float x, float y)
 // Scratch of one render thread; reused between frames so a sequence doesn't reallocate.
 struct Scratch {
 	std::vector<unsigned char> backdrop, mask, glass;
-	std::vector<float> warpX, warpY;
+	std::vector<float> warpX, warpY, dist, edtZ, edtD;
+	std::vector<int> edtV;
 };
 
 // Anti-aliased coverage of the built-in shape(s) over `roi`. Two shapes join with the same polynomial smooth minimum as
@@ -394,10 +397,105 @@ template <class P> Rect AlphaBounds(const World& src)
 	return b;
 }
 
+// Backdrop as RGBA8 over `roi`, premultiplied so transparent areas read as black, edge-clamped past its bounds.
+template <class P> void FillBackdrop(const World& back, const Rect& roi, Scratch& sc)
+{
+	using T = typename P::Chan;
+	const int w = roi.w();
+	const Rect br = back.rect();
+	if (br.empty()) {
+		std::fill(sc.backdrop.begin(), sc.backdrop.end(), (unsigned char)0);
+		return;
+	}
+	for (int y = roi.t; y < roi.b; y++) {
+		const T* row = PixelAt<P>(back, br.l, std::min(std::max(y, br.t), br.b - 1));
+		unsigned char* d = sc.backdrop.data() + size_t(y - roi.t) * w * 4;
+		for (int x = roi.l; x < roi.r; x++, d += 4) {
+			const T* px = row + size_t(std::min(std::max(x, br.l), br.r - 1) - br.l) * 4;
+			if (sizeof(T) == 1 && (float)px[P::A] == P::Max) {
+				d[0] = (unsigned char)px[P::R];
+				d[1] = (unsigned char)px[P::G];
+				d[2] = (unsigned char)px[P::B];
+			} else {
+				const float k = (float)px[P::A] / (P::Max * P::Max);
+				d[0] = ToByte(px[P::R] * k);
+				d[1] = ToByte(px[P::G] * k);
+				d[2] = ToByte(px[P::B] * k);
+			}
+			d[3] = 255;
+		}
+	}
+}
+
+// Squared distance transform in place (Felzenszwalb and Huttenlocher), rows then columns.
+inline void SquaredDistance(std::vector<float>& g, int w, int h, Scratch& sc)
+{
+	const int longest = std::max(w, h);
+	sc.edtD.resize(longest);
+	sc.edtV.resize(longest);
+	sc.edtZ.resize(longest + 1);
+	const auto line = [&](float* f, int n, int step) {
+		int* v = sc.edtV.data();
+		float* z = sc.edtZ.data(), * d = sc.edtD.data();
+		int k = 0;
+		v[0] = 0;
+		z[0] = -1e20f;
+		z[1] = 1e20f;
+		for (int q = 1; q < n; q++) {
+			const float fq = f[q * step] + float(q) * q;
+			float s;
+			for (;;) {
+				const int p = v[k];
+				s = (fq - f[p * step] - float(p) * p) / (2.f * (q - p));
+				if (s > z[k] || k == 0) break;
+				k--;
+			}
+			k++;
+			v[k] = q;
+			z[k] = s;
+			z[k + 1] = 1e20f;
+		}
+		k = 0;
+		for (int q = 0; q < n; q++) {
+			while (z[k + 1] < q) k++;
+			const int p = v[k];
+			d[q] = f[p * step] + float(q - p) * (q - p);
+		}
+		for (int q = 0; q < n; q++) f[q * step] = d[q];
+	};
+	for (int y = 0; y < h; y++) line(g.data() + size_t(y) * w, w, 1);
+	for (int x = 0; x < w; x++) line(g.data() + x, h, w);
+}
+
+// Separate parts of one layer fuse into one liquid body: closing by r px (grow, then shrink back), so parts within 2r grow a
+// neck and inner corners round off, however many parts there are. Uses the edge pixels' coverage for sub-pixel distance.
+inline void FuseParts(unsigned char* mask, int w, int h, float r, Scratch& sc)
+{
+	if (r < 0.5f) return;
+	const size_t n = size_t(w) * h;
+	const float far_ = 1e20f;
+	sc.dist.resize(n);
+	for (size_t i = 0; i < n; i++) { // distance to the shape
+		const float a = mask[i] / 255.f, e = std::max(0.f, 0.5f - a);
+		sc.dist[i] = mask[i] == 255 ? 0.f : mask[i] == 0 ? far_ : e * e;
+	}
+	SquaredDistance(sc.dist, w, h, sc);
+	for (size_t i = 0; i < n; i++) { // grown coverage, then distance to outside it
+		const float a = std::min(std::max(r - std::sqrt(sc.dist[i]) + 0.5f, 0.f), 1.f), e = std::max(0.f, a - 0.5f);
+		sc.dist[i] = a >= 1.f ? far_ : a <= 0.f ? 0.f : e * e;
+	}
+	SquaredDistance(sc.dist, w, h, sc);
+	for (size_t i = 0; i < n; i++) { // shrunk back; the original edge stays exactly as drawn
+		const unsigned char c = ToByte(std::sqrt(sc.dist[i]) - r + 0.5f);
+		if (c > mask[i]) mask[i] = c;
+	}
+}
+
 // The whole frame. `in` passes through untouched outside the glass at its full bit depth; only the shape's bounds plus
 // `Margin` go through the 8-bit engine. shapeLayer: alpha source instead of the built-in shape. backLayer: backdrop instead of `in`.
 // shortcut: the engine is 8-bit, so inside the glass 16/32-bit footage is quantized and HDR clipped; add an f32 path to glass_core when banding shows up.
-template <class P> int RenderFrameT(const Settings& s, const World& in, const World& out, const World* shapeLayer, const World* backLayer, Scratch& sc)
+// under8: what's under the layer, 8-bit ARGB whatever the project depth; wins over `in` and backLayer as the backdrop.
+template <class P> int RenderFrameT(const Settings& s, const World& in, const World& out, const World* shapeLayer, const World* backLayer, const World* under8, Scratch& sc)
 {
 	using T = typename P::Chan;
 	const Rect outR = out.rect();
@@ -416,10 +514,11 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 		if (both.r < outR.r) memset(PixelAt<P>(out, both.r, y), 0, size_t(outR.r - both.r) * pxBytes);
 	}
 
+	if (s.noGlass) return 0;
 	const World* alpha = shapeLayer ? shapeLayer : s.clipAlpha ? &in : nullptr;
 	const Rect bounds = alpha ? AlphaBounds<P>(*alpha) : BuiltInBounds(s);
 	if (bounds.empty()) return 0;
-	const int margin = Margin(s.core, 1);
+	const int margin = Margin(s.core, 1) + (s.ownLayer ? (int)std::ceil(s.core[20] * 0.5f) : 0);
 	// Buffer reaches `margin` past the frame so a shape cut by the frame edge has no false edge there.
 	const Rect roi = Clip(Grow(bounds, margin), Grow(outR, margin));
 	if (roi.empty() || Clip(roi, outR).empty()) return 0;
@@ -437,33 +536,12 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 	} else {
 		BuildMask(s, roi, sc);
 	}
+	if (s.ownLayer) FuseParts(sc.mask.data(), w, h, s.core[20] * 0.5f, sc);
 
-	// Backdrop to RGBA8, premultiplied so transparent areas read as black, edge-clamped past its bounds.
-	const World& back = backLayer ? *backLayer : in;
+	// Backdrop to RGBA8.
 	sc.backdrop.resize(n * 4);
-	const Rect br = back.rect();
-	if (br.empty()) {
-		std::fill(sc.backdrop.begin(), sc.backdrop.end(), (unsigned char)0);
-	} else {
-		for (int y = roi.t; y < roi.b; y++) {
-			const T* row = PixelAt<P>(back, br.l, std::min(std::max(y, br.t), br.b - 1));
-			unsigned char* d = sc.backdrop.data() + size_t(y - roi.t) * w * 4;
-			for (int x = roi.l; x < roi.r; x++, d += 4) {
-				const T* px = row + size_t(std::min(std::max(x, br.l), br.r - 1) - br.l) * 4;
-				if (sizeof(T) == 1 && (float)px[P::A] == P::Max) {
-					d[0] = (unsigned char)px[P::R];
-					d[1] = (unsigned char)px[P::G];
-					d[2] = (unsigned char)px[P::B];
-				} else {
-					const float k = (float)px[P::A] / (P::Max * P::Max);
-					d[0] = ToByte(px[P::R] * k);
-					d[1] = ToByte(px[P::G] * k);
-					d[2] = ToByte(px[P::B] * k);
-				}
-				d[3] = 255;
-			}
-		}
-	}
+	if (under8) FillBackdrop<PxARGB8>(*under8, roi, sc);
+	else FillBackdrop<P>(backLayer ? *backLayer : in, roi, sc);
 
 	sc.glass.resize(n * 4);
 	int e = lg_render(s.core, sc.backdrop.data(), sc.mask.data(), 1, (unsigned)w, (unsigned)h, sc.glass.data(), nullptr);
@@ -494,14 +572,14 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 	return 0;
 }
 
-inline int RenderFrame(PixFmt f, const Settings& s, const World& in, const World& out, const World* shapeLayer, const World* backLayer, Scratch& sc)
+inline int RenderFrame(PixFmt f, const Settings& s, const World& in, const World& out, const World* shapeLayer, const World* backLayer, Scratch& sc, const World* under8 = nullptr)
 {
 	switch (f) {
-	case FMT_ARGB8: return RenderFrameT<PxARGB8>(s, in, out, shapeLayer, backLayer, sc);
-	case FMT_ARGB16: return RenderFrameT<PxARGB16>(s, in, out, shapeLayer, backLayer, sc);
-	case FMT_ARGBF: return RenderFrameT<PxARGBF>(s, in, out, shapeLayer, backLayer, sc);
-	case FMT_BGRA8: return RenderFrameT<PxBGRA8>(s, in, out, shapeLayer, backLayer, sc);
-	case FMT_BGRAF: return RenderFrameT<PxBGRAF>(s, in, out, shapeLayer, backLayer, sc);
+	case FMT_ARGB8: return RenderFrameT<PxARGB8>(s, in, out, shapeLayer, backLayer, under8, sc);
+	case FMT_ARGB16: return RenderFrameT<PxARGB16>(s, in, out, shapeLayer, backLayer, under8, sc);
+	case FMT_ARGBF: return RenderFrameT<PxARGBF>(s, in, out, shapeLayer, backLayer, under8, sc);
+	case FMT_BGRA8: return RenderFrameT<PxBGRA8>(s, in, out, shapeLayer, backLayer, under8, sc);
+	case FMT_BGRAF: return RenderFrameT<PxBGRAF>(s, in, out, shapeLayer, backLayer, under8, sc);
 	}
 	return -1;
 }

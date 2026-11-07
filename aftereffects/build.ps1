@@ -2,8 +2,10 @@
 #   powershell -ExecutionPolicy Bypass -File build.ps1 [-SDK <unpacked AE SDK Examples folder>] [-NoInstall]
 param(
     [string]$SDK = "E:\AI\SDK\AE_SDK\AfterEffectsSDK\Examples",
-    [switch]$NoInstall
+    [switch]$NoInstall,
+    [switch]$Test # builds the separate "Liquid Glass (test)" effect; never installs
 )
+if ($Test) { $NoInstall = $true }
 $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
 $out = Join-Path $here "build"
@@ -16,6 +18,7 @@ if ($LASTEXITCODE) { throw "cargo build failed" }
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -products * -property installationPath
 $inc = "/I`"$SDK\Headers`" /I`"$SDK\Headers\SP`" /I`"$SDK\Headers\Win`" /I`"$SDK\Resources`" /I`"$SDK\Util`" /I`"$here\Source`""
+if ($Test) { $inc += " /DLG_TEST" }
 $engine = Join-Path $here "..\target\release\glass_core.lib"
 # PiPL steps are the SDK's own: preprocess the .r, PiPLTool turns it into a resource script.
 $cmd = "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && cd /d `"$out`" && " +

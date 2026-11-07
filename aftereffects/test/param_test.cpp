@@ -1,5 +1,6 @@
 // Host logic without After Effects or Premiere: parameter mapping, looks, shapes, pixel formats, plus a 1080p timing.
 #include "../Source/GlassHost.h"
+#include "../Source/GlassStudioModel.h"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -66,6 +67,145 @@ template <class P> static void FormatCase(PixFmt fmt, const Frame<uint8_t>& ref)
 
 int main()
 {
+	// Studio covers every material row, with shared layout edges and clamped interaction math.
+	const auto tabs = studio::Tabs();
+	CHECK(tabs.size() == 11);
+	CHECK(std::strcmp(tabs[0].label, "Looks") == 0 && tabs[0].rows.empty());
+	CHECK(studio::kHeight == 520);
+	CHECK(studio::PanelWidth(100) == 280 && studio::PanelWidth(1000) == 800);
+	for (float width : { 280.f, 800.f }) {
+		const float bx[] = { 0.39f, 0.61f }, by[] = { 0.5f, 0.5f };
+		CHECK(studio::PanelWidth(width) == width);
+		const auto status = studio::StatusBox(width);
+		CHECK(status.x >= 0 && status.x + status.w <= width && status.y + status.h == studio::kHeight);
+		const auto inside = [&](const studio::Box& b) {
+			CHECK(b.x >= 0 && b.y >= 0 && b.w > 0 && b.h > 0);
+			CHECK(b.x + b.w <= width && b.y + b.h < status.y);
+		};
+		inside(studio::Header(width));
+		inside(studio::Hero(width));
+		for (int t = 0; t < (int)tabs.size(); t++) {
+			const auto button = studio::TabBox(t, width);
+			inside(button);
+			CHECK((studio::HitTest(button.x + 2, button.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::TabButton, t }));
+			if (t == 0) for (int i = 0; i < kLookCount; i++) {
+				const auto card = studio::LookBox(i, width), thumb = studio::Thumbnail(card);
+				inside(card); inside(thumb);
+				CHECK((studio::HitTest(thumb.x + 2, thumb.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::LookCard, i }));
+				CHECK(thumb.x >= card.x && thumb.x + thumb.w <= card.x + card.w);
+				CHECK(thumb.y >= card.y && thumb.y + thumb.h <= card.y + card.h);
+			}
+			for (int n = 0; n < (int)tabs[t].rows.size(); n++) {
+				const auto b = studio::RowBox(tabs[t], n, width);
+				const Row& row = kRows[tabs[t].rows[n]];
+				inside(b);
+				CHECK((studio::HitTest(b.x + 2, b.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::Control, n }));
+				inside({ b.x - 8, b.y - 3, b.w + 16, b.h + 2 });
+				CHECK(b.y >= studio::BodyTop());
+				if (row.kind == K_FLOAT) {
+					const auto track = studio::Track(b);
+					inside(track);
+					CHECK(track.y + track.h <= b.y + b.h);
+					const float current = row.min + (row.max - row.min) * 0.25f;
+					CHECK(!studio::NearTrack(track, b.x, b.y + 10));
+					CHECK(studio::SliderValue(row, current, track, b.x, b.y + 10, 0, true, false, false) == current);
+					CHECK(studio::SliderValue(row, current, track, b.x, b.y + 10, 0, false, false, false) == current);
+					CHECK(studio::SliderValue(row, current, track, b.x, b.y + 10, 3, false, false, false) > current);
+					CHECK(studio::SliderValue(row, current, track, track.x + track.w, track.y - 5, 0, true, false, false) == row.max);
+					CHECK(studio::SliderValue(row, current, track, track.x + track.w, track.y - 7, 0, true, false, false) == current);
+					CHECK(studio::SliderValue(row, current, track, track.x, track.y, 0, true, true, false) == current);
+					CHECK(studio::SliderValue(row, current, track, b.x, b.y, 0, true, false, true) == row.dflt);
+				} else if (row.kind == K_ANGLE) {
+					const auto dial = studio::DialBox(b);
+					inside(dial);
+					CHECK(dial.y + dial.h <= b.y + b.h);
+				} else if (row.kind == K_POPUP) {
+					const int count = (int)studio::Items(row.items).size();
+					for (int i = 0; i < count; i++) {
+						const auto segment = studio::Segment(b, i, count);
+						inside(segment);
+						CHECK(segment.y + segment.h <= b.y + b.h);
+					}
+				}
+			}
+		}
+	}
+	CHECK(std::strcmp(studio::BackdropStatus(false, true), "Setting up...") == 0);
+	CHECK(std::strcmp(studio::BackdropStatus(false, false), "Backdrop layer missing - re-apply the effect") == 0);
+	CHECK(std::strcmp(studio::BackdropStatus(true, true), studio::BackdropStatus(true, false)) == 0);
+	int covered[kCoreCount] = {};
+	for (const auto& tab : tabs) {
+		for (int n = 0; n < (int)tab.rows.size(); n++) {
+			const Row& r = kRows[tab.rows[n]];
+			CHECK(IndexOf(r.id) == tab.rows[n] + 1);
+			CHECK(r.kind == K_FLOAT || r.kind == K_ANGLE || r.kind == K_POPUP || r.kind == K_COLOR || r.kind == K_CHECK);
+			if (r.core >= 0) for (int c = 0; c < (r.kind == K_COLOR ? 3 : 1); c++) covered[r.core + c]++;
+			const auto box = studio::RowBox(tab, n, studio::kWidth);
+			CHECK(box.y + box.h < studio::kHeight - 40);
+			CHECK(box.contains(box.x, box.y) && !box.contains(box.x + box.w, box.y));
+			if (r.kind == K_FLOAT) {
+				const auto track = studio::Track(box);
+				CHECK(studio::ValueAt(r, track.x - 100, track) == r.min);
+				CHECK(studio::ValueAt(r, track.x + track.w + 100, track) == r.max);
+				CHECK(std::fabs(studio::Fraction(r, studio::ValueAt(r, track.x + track.w / 2, track)) - 0.5f) < 0.001f);
+				CHECK(std::fabs(studio::DragValue(r, r.min, track.w, track.w, true) - (r.min + (r.max - r.min) * 0.1f)) < 0.001f);
+			}
+			if (r.kind == K_POPUP) {
+				const auto items = studio::Items(r.items);
+				for (int i = 0; i < (int)items.size(); i++) {
+					const auto segment = studio::Segment(box, i, (int)items.size());
+					CHECK(segment.y + segment.h <= box.y + box.h);
+				}
+			}
+		}
+	}
+	for (int n : covered) CHECK(n == 1);
+	CHECK(std::fabs(studio::AngleAt(1, 0, 0, 0) - 90) < 0.001f);
+	CHECK(studio::AngleDelta(-179, 179) == 2);
+	float bx[] = { 0.38f, 0.62f }, by[] = { 0.5f, 0.5f };
+	const auto hero = studio::Hero(studio::kWidth);
+	CHECK(studio::BlobHit(hero.x + bx[0] * hero.w, hero.y + by[0] * hero.h, bx, by, hero) == 0);
+	CHECK(studio::BlobHit(-1, -1, bx, by, hero) == -1);
+	CHECK(studio::HitTest(-1, -1, studio::kWidth, tabs, 0, bx, by).type == studio::None);
+	for (int i = 0; i < kLookCount; i++) {
+		const auto b = studio::LookBox(i, studio::kWidth);
+		CHECK((studio::HitTest(b.x + 2, b.y + 2, studio::kWidth, tabs, 0, bx, by) == studio::Hit{ studio::LookCard, i }));
+	}
+	for (int t = 0; t < (int)tabs.size(); t++) {
+		const auto b = studio::TabBox(t, studio::kWidth);
+		CHECK((studio::HitTest(b.x + 2, b.y + 2, studio::kWidth, tabs, 0, bx, by) == studio::Hit{ studio::TabButton, t }));
+		for (int n = 0; n < (int)tabs[t].rows.size(); n++) {
+			const auto r = studio::RowBox(tabs[t], n, studio::kWidth);
+			CHECK((studio::HitTest(r.x + 2, r.y + 2, studio::kWidth, tabs, t, bx, by) == studio::Hit{ studio::Control, n }));
+		}
+		if (t != 0) {
+			const auto look = studio::LookBox(0, studio::kWidth);
+			CHECK(studio::HitTest(look.x + 2, look.y + 2, studio::kWidth, tabs, t, bx, by).type != studio::LookCard);
+		}
+	}
+	for (int i = 0; i < kLookCount; i++) {
+		float p[kCoreCount];
+		std::copy(kDefaults, kDefaults + kCoreCount, p);
+		ApplyLook(i, p);
+		CHECK(studio::MatchesLook(i, p));
+		p[3] += 17; p[20] += 13;
+		CHECK(studio::MatchesLook(i, p));
+		p[2] += 1;
+		CHECK(!studio::MatchesLook(i, p));
+		std::vector<unsigned char> thumb;
+		ApplyLook(i, p);
+		CHECK(studio::Preview(p, 112, 32, bx, by, thumb) == 0);
+		CHECK(thumb.size() == 112 * 32 * 4);
+	}
+	std::vector<unsigned char> preview, moved;
+	CHECK(studio::Preview(kDefaults, 160, 80, bx, by, preview) == 0);
+	bx[0] += 0.1f;
+	CHECK(studio::Preview(kDefaults, 160, 80, bx, by, moved) == 0);
+	CHECK(preview.size() == 160 * 80 * 4 && preview != moved);
+	bool opaque = true;
+	for (size_t i = 3; i < preview.size(); i += 4) opaque = opaque && preview[i] == 255;
+	CHECK(opaque);
+
 	// Every engine value is driven by exactly one row.
 	CHECK(lg_param_count() == kCoreCount);
 	int driven[kCoreCount] = {};
@@ -76,7 +216,7 @@ int main()
 				driven[r.core + 1]++;
 				driven[r.core + 2]++;
 			}
-			if (r.kind == K_FLOAT) CHECK(r.dflt == kDefaults[r.core]);
+			if (r.kind == K_FLOAT) CHECK(r.dflt == (r.core == 3 ? 30.f : r.core == 13 ? 0.25f : kDefaults[r.core]));
 			if (r.kind == K_FLOAT) CHECK(r.dflt >= r.min && r.dflt <= r.max);
 			if (r.kind == K_POPUP) CHECK((int)r.dflt == (int)kDefaults[r.core] + 1);
 		}
