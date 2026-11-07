@@ -1,6 +1,8 @@
 // Included after the host's look action; only PF_Cmd_EVENT accesses this UI state.
 #pragma once
 #include "GlassStudioModel.h"
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
 
 namespace studio_ui {
 using studio::Box;
@@ -11,9 +13,15 @@ using studio::Blob;
 using studio::LookCard;
 using studio::TabButton;
 using studio::Control;
+using studio::AboutLink;
 struct State {
 	int tab = 0;
 	Hit hover;
+	Hit pressed;
+	studio::Skin skin;
+	bool textLayer = false, savedText = false, savedLiquid = false;
+	int letterWidth = 0, letterHeight = 0;
+	std::vector<unsigned char> letters;
 	float bx[2] = { 0.39f, 0.61f }, by[2] = { 0.5f, 0.5f };
 	float savedCore[kCoreCount] = {}, savedX[2] = {}, savedY[2] = {};
 	int savedWidth = 0;
@@ -29,8 +37,8 @@ static DRAWBOT_ColorRGBA Colour(unsigned hex)
 {
 	return { ((hex >> 16) & 255) / 255.f, ((hex >> 8) & 255) / 255.f, (hex & 255) / 255.f, 1 };
 }
-const unsigned Background = 0x1b1d1c, Card = 0x242726, Hover = 0x2e3230, Green = 0x2fae7c,
-	Text = 0xe9efec, Muted = 0x9aa6a0, Border = 0x3c4240;
+const unsigned Background = 0x141716, Green = 0x45c891,
+	Text = 0xf2f7f4, Muted = 0xc0d0c8, Border = 0x5b766c;
 
 struct Canvas {
 	AEFX_DrawbotSuitesScoper scope;
@@ -76,7 +84,7 @@ struct Canvas {
 			DRAWBOT_ErrorToException(s->surface_suiteP->FillPath(surface, brush, path, kDRAWBOT_FillType_Default));
 		}
 	}
-	void Label(const char* text, float x, float y, unsigned hex = Text, float size = 11, float width = 380)
+	void Label(const char* text, float x, float y, unsigned hex = Text, float size = studio::kLabelSize, float width = 380)
 	{
 		std::vector<DRAWBOT_UTF16Char> wide;
 		for (const unsigned char* p = (const unsigned char*)text; *p; p++) wide.push_back(*p);
@@ -98,14 +106,74 @@ struct Canvas {
 		DRAWBOT_PointF32 origin = { ox + x, oy + y };
 		DRAWBOT_ErrorToException(s->surface_suiteP->DrawImage(surface, image, &origin, 1));
 	}
+	void Glass(Box b, bool active = false)
+	{
+		const auto* skin = state.skin.Find(b, active);
+		if (skin) Image(skin->pixels, (int)std::ceil(b.w), (int)std::ceil(b.h), b.x, b.y);
+	}
+	void Thumb(float x, float y)
+	{
+		const auto* skin = state.skin.Find({ 0, 0, 20, 20 }, true);
+		if (skin) Image(skin->pixels, 20, 20, x - 10, y - 10);
+		Round({ x - 9, y - 9, 18, 18 }, 9, 0xc1f9df, true);
+	}
+	void Line(std::initializer_list<DRAWBOT_PointF32> points, float x, float y, unsigned hex = Muted)
+	{
+		DRAWBOT_PathP path(s->supplier_suiteP, supplier);
+		bool first = true;
+		for (auto p : points) {
+			if (first) { DRAWBOT_ErrorToException(s->path_suiteP->MoveTo(path, ox + x + p.x, oy + y + p.y)); }
+			else { DRAWBOT_ErrorToException(s->path_suiteP->LineTo(path, ox + x + p.x, oy + y + p.y)); }
+			first = false;
+		}
+		auto colour = Colour(hex);
+		DRAWBOT_PenP pen(s->supplier_suiteP, supplier, &colour, 1.35f);
+		DRAWBOT_ErrorToException(s->surface_suiteP->StrokePath(surface, pen, path));
+	}
+	// Coordinates follow the shared 16 px line icons in photoshop/looks.js.
+	void Icon(const char* name, float x, float y, unsigned colour = Muted)
+	{
+		auto is = [&](const char* n) { return !std::strcmp(name, n); };
+		auto line = [&](std::initializer_list<DRAWBOT_PointF32> p) { Line(p, x, y, colour); };
+		auto circle = [&](float cx, float cy, float r) { Round({ x + cx - r, y + cy - r, r * 2, r * 2 }, r, colour, true); };
+		auto rect = [&](float a, float b, float w, float h, float r) { Round({ x + a, y + b, w, h }, r, colour, true); };
+		if (is("presets")) { for (int j : {2, 9}) for (int i : {2, 9}) rect((float)i, (float)j, 5, 5, 1.2f); }
+		else if (is("advanced")) {
+			line({{2,4},{9,4}}); line({{12,4},{14,4}}); line({{2,8},{4,8}}); line({{7,8},{14,8}}); line({{2,12},{11,12}});
+			circle(10.5f,4,1.5f); circle(5.5f,8,1.5f); circle(12.5f,12,1.5f);
+		} else if (is("lens")) { circle(6.8f,6.8f,4.6f); line({{10.2f,10.2f},{14,14}}); line({{4.6f,6.2f},{5.2f,5},{6.4f,4.4f}}); }
+		else if (is("sun")) {
+			circle(8,8,2.6f); line({{8,1.5f},{8,3.1f}}); line({{8,12.9f},{8,14.5f}}); line({{1.5f,8},{3.1f,8}}); line({{12.9f,8},{14.5f,8}});
+			line({{3.4f,3.4f},{4.5f,4.5f}}); line({{11.5f,11.5f},{12.6f,12.6f}}); line({{3.4f,12.6f},{4.5f,11.5f}}); line({{11.5f,4.5f},{12.6f,3.4f}});
+		} else if (is("frost")) {
+			line({{8,1.8f},{8,14.2f}}); line({{2.6f,4.9f},{13.4f,11.1f}}); line({{2.6f,11.1f},{13.4f,4.9f}});
+			line({{6.4f,2.6f},{8,4.2f},{9.6f,2.6f}}); line({{6.4f,13.4f},{8,11.8f},{9.6f,13.4f}});
+		} else if (is("diamond")) {
+			line({{4.5f,2.5f},{11.5f,2.5f},{14.5f,6.1f},{8,14},{1.5f,6.1f},{4.5f,2.5f}});
+			line({{1.5f,6.1f},{14.5f,6.1f}}); line({{6,2.5f},{5,6.1f},{8,14},{11,6.1f},{10,2.5f}});
+		} else if (is("shadow")) { rect(2,2,8.5f,8.5f,2); line({{12.5f,5.5f},{12.5f,12},{12,13},{11,13.5f},{5.5f,13.5f}}); }
+		else if (is("glow") || is("stroke")) { rect(2,2,12,12,3.5f); rect(4.5f,4.5f,7,7,1.8f); }
+		else if (is("film")) {
+			rect(3,1.8f,10,12.4f,1.2f); line({{5.5f,1.8f},{5.5f,14.2f}}); line({{10.5f,1.8f},{10.5f,14.2f}});
+			for (float v : {4.5f,8.f,11.5f}) { line({{3,v},{5.5f,v}}); line({{10.5f,v},{13,v}}); }
+		} else if (is("info")) { circle(8,8,6.2f); line({{8,7.2f},{8,11.2f}}); circle(8,4.9f,0.35f); }
+		else if (is("blend")) { circle(6,8,4.2f); circle(10,8,4.2f); }
+		else if (is("palette")) {
+			// The palette outline is sampled from the shared SVG's circular bowl and paint well.
+			line({{8,2},{5,2.8f},{2.8f,5},{2,8},{2.8f,11},{5,13.2f},{8,14},{8.8f,13.4f},{8.8f,12.4f},{8.5f,11.5f},{9.7f,10.7f},{11,10.7f},{13.1f,9.8f},{14,7.7f},{13.2f,5},{11,2.8f},{8,2}});
+			circle(5,7.5f,0.6f); circle(7.4f,4.8f,0.6f); circle(10.6f,5.4f,0.6f);
+		} else if (is("moon")) { line({{13,10.2f},{11,11},{8.5f,10.8f},{6.5f,9.2f},{5.4f,6.5f},{5.8f,3},{3.4f,4.4f},{2.4f,7.2f},{3,10.2f},{5,12.4f},{8,13.2f},{11,12.4f},{13,10.2f}}); }
+		else { rect(2,3,12,10,3.5f); line({{4.5f,6.5f},{5,5.2f},{6.5f,4.5f}}); }
+	}
 	void Dial(Box b, float angle, bool hover)
 	{
 		float radius = b.w / 2, cx = b.x + radius, cy = b.y + radius;
-		Round(b, radius, hover ? Hover : Background);
+		Glass(b);
 		Round(b, radius, hover ? Green : Border, true);
 		const float a = angle * 3.14159265f / 180;
-		float x = cx + std::sin(a) * (radius - 5), y = cy - std::cos(a) * (radius - 5);
-		Round({ x - 3, y - 3, 6, 6 }, 3, Green);
+		Icon("sun", cx - 8, cy - 8, 0xffda91);
+		float x = cx + std::sin(a) * (radius - 3), y = cy - std::cos(a) * (radius - 3);
+		Round({ x - 4, y - 4, 8, 8 }, 4, 0xffe9bd);
 	}
 };
 
@@ -161,6 +229,7 @@ static void Core(PF_ParamDef* params[], float* core)
 // Metadata only: drawing must never acquire a comp frame or enter the renderer.
 static std::string Status(PF_InData* in, PF_OutData* out)
 {
+	state.textLayer = false;
 	AEFX_SuiteScoper<AEGP_PFInterfaceSuite1> pfi(in, kAEGPPFInterfaceSuite, kAEGPPFInterfaceSuiteVersion1, out);
 	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(in, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, out);
 	AEFX_SuiteScoper<AEGP_MemorySuite1> mem(in, kAEGPMemorySuite, kAEGPMemorySuiteVersion1, out);
@@ -168,6 +237,7 @@ static std::string Status(PF_InData* in, PF_OutData* out)
 	AEGP_ObjectType type = AEGP_ObjectType_NONE;
 	AEGP_LayerFlags flags = 0;
 	if (pfi->AEGP_GetEffectLayer(in->effect_ref, &layer) || !layer || ls->AEGP_GetLayerObjectType(layer, &type) || ls->AEGP_GetLayerFlags(layer, &flags)) return "Layer status unavailable";
+	state.textLayer = type == AEGP_ObjectType_TEXT;
 	if ((type != AEGP_ObjectType_VECTOR && type != AEGP_ObjectType_TEXT) || (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER)) return "Put this effect on a shape or text layer";
 	AEGP_CompH comp = nullptr;
 	A_long at = 0, count = 0;
@@ -189,7 +259,8 @@ static std::string Status(PF_InData* in, PF_OutData* out)
 }
 static Hit HitTest(float x, float y, float w)
 {
-	return studio::HitTest(x, y, w, tabs, state.tab, state.bx, state.by);
+	Hit hit = studio::HitTest(x, y, w, tabs, state.tab, state.bx, state.by);
+	return state.textLayer && hit.type == Blob ? Hit{} : hit;
 }
 static PF_Err Refresh(PF_InData* in, PF_OutData* out, PF_EventExtra* e, bool changed)
 {
@@ -201,43 +272,64 @@ static PF_Err Refresh(PF_InData* in, PF_OutData* out, PF_EventExtra* e, bool cha
 	return app->PF_InvalidateRect(e->contextH, &rect);
 }
 
+static const char* TabIcon(const char* label)
+{
+	const char* labels[] = { "Looks", "Quick adjust", "Lens", "Light", "Colour", "Drop shadow", "Dim background", "Inner glow", "Stroke", "Film grain", "Advanced", "About" };
+	const char* icons[] = { "presets", "advanced", "lens", "sun", "palette", "shadow", "moon", "glow", "stroke", "film", "advanced", "info" };
+	for (int i = 0; i < 12; i++) if (!std::strcmp(label, labels[i])) return icons[i];
+	return "advanced";
+}
 static PF_Err Draw(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_EventExtra* e, float w)
 {
 	Canvas c(in, out, e);
 	DRAWBOT_SaveAndRestoreStateStack restore(c.s->surface_suiteP, c.surface);
 	DRAWBOT_Rect32 clip = { (int)c.ox, (int)c.oy, (int)w, studio::kHeight };
 	DRAWBOT_ErrorToException(c.s->surface_suiteP->Clip(c.surface, c.supplier, &clip));
-	c.Rect({ 0, 0, w, studio::kHeight }, Background);
-	const Box header = studio::Header(w);
-	c.Round(header, 8, 0x0d4431);
-	c.Label("SUDO", 14, header.h / 2 + 4, 0xb7e6d1, 11, 42);
-	c.Label("Glass Studio", 68, header.h / 2 + 5, Text, 16, w - 124);
-	c.Label("LIVE", w - 47, header.h / 2 + 4, 0x45c891, 10, 40);
+	if (state.skin.Ensure((int)w)) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+	c.Image(state.skin.background, (int)w, studio::kHeight, 0, 0);
+	c.Glass(studio::Header(w), true);
+	c.Label("SUDO", 20, 33, 0xb7e6d1, 12, 44);
+	c.Label("Glass Studio", 76, 34, Text, studio::kTitleSize, w - 92);
+	c.Label("by CGSudo", 76, 52, Muted, 12, w - 92);
 
 	float core[kCoreCount];
 	Core(params, core);
+	state.status = Status(in, out);
 	const Box hero = studio::Hero(w);
-	const int hw = (int)hero.w, hh = (int)hero.h;
-	if (state.hero.empty() || state.savedWidth != hw || std::memcmp(core, state.savedCore, sizeof core) ||
-		std::memcmp(state.bx, state.savedX, sizeof state.bx) || std::memcmp(state.by, state.savedY, sizeof state.by)) {
-		int err = studio::Preview(core, hw, hh, state.bx, state.by, state.hero);
+	const Box renderSize = studio::HeroRenderSize(w);
+	const int hw = (int)renderSize.w, hh = (int)renderSize.h;
+	const int liquidRow = studio::RowByLabel("Liquid letters");
+	const bool liquid = liquidRow >= 0 && Value(kRows[liquidRow], *params[liquidRow + 1]) != 0;
+	if (state.textLayer && (state.letterWidth != hw || state.letterHeight != hh)) {
+		if (!studio::LetterMasks(hw, hh, state.letters)) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+		state.letterWidth = hw; state.letterHeight = hh;
+	}
+	if (state.hero.empty() || state.savedWidth != (int)w || state.savedText != state.textLayer || state.savedLiquid != liquid ||
+		std::memcmp(core, state.savedCore, sizeof core) || std::memcmp(state.bx, state.savedX, sizeof state.bx) || std::memcmp(state.by, state.savedY, sizeof state.by)) {
+		std::vector<unsigned char> rendered;
+		int err = studio::Preview(core, hw, hh, state.bx, state.by, rendered, state.textLayer ? &state.letters : nullptr, liquid);
 		if (err) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+		if (hw == (int)hero.w && hh == (int)hero.h) state.hero = std::move(rendered);
+		else studio::ScaleImage(rendered, hw, hh, (int)hero.w, (int)hero.h, state.hero);
 		std::copy(core, core + kCoreCount, state.savedCore);
 		std::copy(state.bx, state.bx + 2, state.savedX);
 		std::copy(state.by, state.by + 2, state.savedY);
-		state.savedWidth = hw;
+		state.savedWidth = (int)w; state.savedText = state.textLayer; state.savedLiquid = liquid;
 	}
-	c.Image(state.hero, hw, hh, hero.x, hero.y);
-	if (state.hover.type == Blob) {
+	c.Image(state.hero, (int)hero.w, (int)hero.h, hero.x, hero.y);
+	c.Round(hero, 0, Border, true);
+	if (!state.textLayer && state.hover.type == Blob) {
 		int i = state.hover.index;
 		float radius = studio::BlobRadius(hero);
-		c.Round({ hero.x + state.bx[i] * hero.w - radius, hero.y + state.by[i] * hero.h - radius, radius * 2, radius * 2 }, radius, Green, true);
+		c.Round({ hero.x + state.bx[i] * hero.w - radius, hero.y + state.by[i] * hero.h - radius, radius * 2, radius * 2 }, radius,
+			state.pressed.type == Blob ? Text : Green, true);
 	}
+	c.Label(state.textLayer ? "Aa / Material preview" : "Drag the glass / Material preview", 12, 280, Muted, 12, w - 24);
 	if (state.tab == 0) for (int i = 0; i < kLookCount; i++) {
 		Box b = studio::LookBox(i, w);
 		bool active = studio::MatchesLook(i, core), hover = state.hover == Hit{ LookCard, i };
-		c.Round(b, 7, hover ? Hover : Card);
-		c.Round(b, 7, active || hover ? Green : Border, true);
+		c.Glass(b);
+		if (active || hover) c.Round(b, 12, state.pressed == Hit{ LookCard, i } ? Text : active ? Green : Text, true);
 		const Box thumb = studio::Thumbnail(b);
 		const int tw = (int)thumb.w, th = (int)thumb.h;
 		if (state.thumbs[i].empty() || state.thumbWidth[i] != tw || state.thumbHeight[i] != th) {
@@ -245,19 +337,22 @@ static PF_Err Draw(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Eve
 			std::copy(kDefaults, kDefaults + kCoreCount, look);
 			ApplyLook(i, look);
 			const float bx[] = { 0.4f, 0.6f }, by[] = { 0.5f, 0.5f };
-			if (studio::Preview(look, tw, th, bx, by, state.thumbs[i])) return PF_Err_INTERNAL_STRUCT_DAMAGED;
-			state.thumbWidth[i] = tw;
-			state.thumbHeight[i] = th;
+			if (studio::Preview(look, tw, th, bx, by, state.thumbs[i], nullptr, false, true, i)) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+			state.thumbWidth[i] = tw; state.thumbHeight[i] = th;
 		}
 		c.Image(state.thumbs[i], tw, th, thumb.x, thumb.y);
-		c.Label(kLooks[i].name, b.x + 7, b.y + b.h - 10, active ? Text : Muted, 10, b.w - 14);
-		if (active) c.Round({ b.x + b.w - 10, b.y + b.h - 18, 4, 4 }, 2, Green);
+		const char* icons[] = { "glass", "lens", "frost", "glow", "frost", "moon", "diamond", "blend", "film" };
+		c.Round({ b.x + 8, b.y + 8, 24, 24 }, 8, Background);
+		c.Icon(icons[i], b.x + 12, b.y + 12, Text);
+		c.Label(kLooks[i].name, b.x + 8, b.y + 74, Text, 12, b.w - 16);
 	}
 	for (int i = 0; i < (int)tabs.size(); i++) {
 		Box b = studio::TabBox(i, w);
-		c.Round(b, 5, state.tab == i ? 0x0d4431 : state.hover == Hit{ TabButton, i } ? Hover : Card);
-		if (state.tab == i) c.Round(b, 5, Green, true);
-		c.Label(tabs[i].label, b.x + 4, b.y + 14, state.tab == i ? Text : Muted, 9, b.w - 8);
+		const bool active = state.tab == i, hover = state.hover == Hit{ TabButton, i };
+		c.Glass(b, active);
+		if (active || hover) c.Round(b, 16, state.pressed == Hit{ TabButton, i } ? Text : active ? Green : Text, true);
+		c.Icon(TabIcon(tabs[i].label), b.x + 6, b.y + 8, active ? 0xb1ffdc : Muted);
+		c.Label(tabs[i].label, b.x + 28, b.y + 21, active ? Text : Muted, 12, b.w - 32);
 	}
 	const auto& tab = tabs[state.tab];
 	for (int n = 0; n < (int)tab.rows.size(); n++) {
@@ -265,45 +360,67 @@ static PF_Err Draw(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Eve
 		const Row& r = kRows[rowIndex];
 		const PF_ParamDef& p = *params[rowIndex + 1];
 		Box b = studio::RowBox(tab, n, w);
-		bool hover = state.hover == Hit{ Control, n };
-		c.Round({ b.x - 8, b.y - 3, b.w + 16, b.h + 2 }, 6, hover ? Hover : Card);
-		c.Label(r.label, b.x, b.y + 13, hover ? Text : Muted, 11, b.w - 100);
+		bool hover = state.hover == Hit{ Control, n }, pressed = state.pressed == Hit{ Control, n };
+		c.Glass(studio::RowSurface(b));
+		if (hover || pressed) c.Round(studio::RowSurface(b), 12, pressed ? Text : Green, true);
+		const Box label = studio::RowLabel(b, r);
+		c.Label(r.label, label.x, label.y + 12, Text, 12, label.w);
 		float v = Value(r, p);
 		char value[48];
 		std::snprintf(value, sizeof value, "%.*f%s", r.kind == K_ANGLE ? 0 : r.prec, v, r.kind == K_ANGLE ? " deg" : "");
 		if (r.kind == K_FLOAT) {
-			c.Label(value, b.x + b.w - 64, b.y + 13, Text, 11, 64);
+			c.Label(value, b.x + b.w - 64, b.y + 16, 0xb1ffdc, 12, 64);
 			Box track = studio::Track(b);
-			c.Round(track, 3.5f, Background);
+			c.Glass(track);
 			float fill = studio::Fraction(r, v) * track.w;
-			if (fill > 0) c.Round({ track.x, track.y, std::max(1.f, fill), track.h }, 3.5f, Green);
-			c.Round({ track.x + fill - 4, track.y - 1, 8, 9 }, 4, hover ? 0xffffff : Text);
+			if (fill > 0) c.Round({ track.x, track.y + 1, std::max(1.f, fill), 4 }, 2, Green);
+			c.Thumb(track.x + fill, track.y + 3);
 		} else if (r.kind == K_ANGLE) {
-			c.Label(value, b.x + b.w - 98, b.y + 13, Text, 11, 64);
+			c.Label(value, b.x, b.y + 40, 0xb1ffdc, 12, b.w - 52);
 			c.Dial(studio::DialBox(b), v, hover);
 		} else if (r.kind == K_POPUP) {
 			const auto items = studio::Items(r.items);
 			for (int i = 0; i < (int)items.size(); i++) {
 				Box segment = studio::Segment(b, i, (int)items.size());
 				bool selected = (int)v == i + 1;
-				c.Round(segment, 4, selected ? 0x0d4431 : Background);
-				if (selected || hover) c.Round(segment, 4, selected ? Green : Border, true);
-				c.Label(items[i].c_str(), segment.x + 5, segment.y + 13, selected ? Text : Muted, 10, segment.w - 10);
+				c.Glass(segment, selected);
+				if (selected) c.Round(segment, 10, Green, true);
+				c.Label(items[i].c_str(), segment.x + 8, segment.y + 19, selected ? Text : Muted, 12, segment.w - 16);
 			}
 		} else if (r.kind == K_COLOR) {
 			unsigned rgb = (p.u.cd.value.red << 16) | (p.u.cd.value.green << 8) | p.u.cd.value.blue;
-			c.Round({ b.x + b.w - 74, b.y + 3, 74, 29 }, 6, rgb);
-			c.Round({ b.x + b.w - 74, b.y + 3, 74, 29 }, 6, hover ? Green : Border, true);
+			c.Round({ b.x + b.w - 64, b.y + 8, 64, 36 }, 10, rgb);
+			c.Round({ b.x + b.w - 64, b.y + 8, 64, 36 }, 10, hover ? Green : Text, true);
+			c.Label("Choose colour", b.x, b.y + 40, Muted, 12, b.w - 76);
 		} else if (r.kind == K_CHECK) {
-			c.Round({ b.x + b.w - 42, b.y + 6, 42, 23 }, 11, v ? Green : Background);
-			c.Round({ b.x + b.w - (v ? 20 : 39), b.y + 9, 17, 17 }, 8.5f, Text);
-			c.Label(v ? "On" : "Off", b.x + b.w - 74, b.y + 17, Text, 10, 30);
+			c.Glass(studio::ToggleBox(b), v != 0);
+			c.Round(studio::ToggleBox(b), 14, v ? Green : Border, true);
+			c.Thumb(b.x + b.w - (v ? 14 : 34), b.y + 26);
+			c.Label(v ? "On" : "Off", b.x, b.y + 40, v ? Green : Muted, 12, 40);
+		}
+	}
+	if (state.tab == (int)tabs.size() - 1) {
+		float y = studio::BodyTop(w);
+		c.Label("SUDO", 24, y + 38, Green, 32, w - 48);
+		c.Label("Liquid Glass for Adobe", 24, y + 78, Text, 18, w - 48);
+		char version[64]; std::snprintf(version, sizeof version, "%d.%d.%d / by CGSudo", MAJOR, MINOR, BUG);
+		c.Label(version, 24, y + 106, Muted, 12, w - 48);
+		c.Label("Live glass. Your layers stay editable.", 24, y + 142, Text, 12, w - 48);
+		c.Label("Made with the Liquid Glass engine.", 24, y + 162, Muted, 12, w - 48);
+		for (int i = 0; i < 2; i++) {
+			Box b = studio::LinkBox(i, w);
+			c.Glass(b, true);
+			if (state.hover == Hit{ AboutLink, i }) c.Round(b, 12, Green, true);
+			c.Label(i ? "GitHub / Source & updates" : "LinkedIn / CGSudo", b.x + 12, b.y + 28, Text, 12, b.w - 40);
+			c.Line({{0,8},{8,0},{2,0},{8,0},{8,6}}, b.x + b.w - 24, b.y + 18, Green);
 		}
 	}
 	const Box status = studio::StatusBox(w);
 	c.Rect({ status.x, status.y, status.w, 1 }, Border);
-	state.status = Status(in, out);
-	c.Label(state.status.c_str(), status.x, status.y + 17, Muted, 10, status.w);
+	const bool live = state.status == studio::BackdropStatus(true, false);
+	c.Round({ status.x, status.y + 13, 6, 6 }, 3, live ? Green : 0xffc76a);
+	c.Label(live ? "Live glass / Shape & text stay editable" : state.status.c_str(), status.x + 14, status.y + 20, Muted, 12, status.w - 14);
+	c.Label("Shift: fine control / Double-click: reset", status.x, status.y + 44, Muted, 12, status.w);
 	e->evt_out_flags |= PF_EO_HANDLED_EVENT;
 	return PF_Err_NONE;
 }
@@ -328,6 +445,7 @@ static PF_Err Event(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Ev
 			if (kind == K_FLOAT) e->u.adjust_cursor.set_cursor = PF_Cursor_RESIZE_HORIZONTAL;
 			if (kind == K_ANGLE) e->u.adjust_cursor.set_cursor = PF_Cursor_CROSS_ROTATE;
 		}
+		state.pressed = {};
 		if (!(h == state.hover)) { state.hover = h; return Refresh(in, out, e, false); }
 		e->evt_out_flags |= PF_EO_HANDLED_EVENT;
 		return PF_Err_NONE;
@@ -340,6 +458,7 @@ static PF_Err Event(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Ev
 	const bool first = e->e_type == PF_Event_DO_CLICK && !click.send_drag;
 	Hit hit = first ? HitTest(x, y, w) : Hit{ (Target)click.continue_refcon[0], (int)click.continue_refcon[1] };
 	state.hover = hit;
+	state.pressed = click.last_time ? Hit{} : hit;
 	if (first) {
 		click.continue_refcon[0] = hit.type;
 		click.continue_refcon[1] = hit.index;
@@ -347,6 +466,13 @@ static PF_Err Event(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Ev
 		click.continue_refcon[3] = (A_intptr_t)(y * 65536);
 	}
 	if (hit.type == None) return PF_Err_NONE;
+	if (hit.type == AboutLink) {
+		if (first) {
+			static const wchar_t* const urls[] = { L"https://www.linkedin.com/in/cgsudo", L"https://github.com/CGSudo/liquid-glass-for-adobe" };
+			if (hit.index >= 0 && hit.index < 2) ShellExecuteW(nullptr, L"open", urls[hit.index], nullptr, nullptr, SW_SHOWNORMAL);
+		}
+		return Refresh(in, out, e, false);
+	}
 	if (hit.type == TabButton) { state.tab = hit.index; state.hover = {}; return Refresh(in, out, e, false); }
 	if (hit.type == LookCard) {
 		float core[kCoreCount];
@@ -383,7 +509,8 @@ static PF_Err Event(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Ev
 		float cx = dial.x + dial.w / 2, cy = dial.y + dial.h / 2;
 		float angle = studio::AngleAt(x, y, cx, cy);
 		float delta = studio::AngleDelta(angle, studio::AngleAt(lastX, lastY, cx, cy));
-		changed = !first && delta != 0 && SetValue(r, p, Value(r, p) + delta * (fine ? 0.1f : 1.f));
+		changed = first && click.num_clicks == 2 ? SetValue(r, p, r.dflt) :
+			!first && delta != 0 && SetValue(r, p, Value(r, p) + delta * (fine ? 0.1f : 1.f));
 		click.send_drag = !click.last_time;
 	} else if (first && r.kind == K_CHECK) {
 		changed = SetValue(r, p, !p.u.bd.value);

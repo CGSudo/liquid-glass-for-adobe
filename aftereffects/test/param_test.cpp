@@ -8,6 +8,24 @@
 static int fails = 0;
 #define CHECK(c) do { if (!(c)) { printf("FAIL line %d: %s\n", __LINE__, #c); fails++; } } while (0)
 
+static float TextWidth(const char* text, int size = 12)
+{
+	HDC dc = CreateCompatibleDC(nullptr);
+	HFONT font = CreateFontW(-size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+		OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+	CHECK(dc && font);
+	if (!dc || !font) { if (dc) DeleteDC(dc); if (font) DeleteObject(font); return 10000; }
+	HGDIOBJ old = SelectObject(dc, font);
+	SIZE extent = {};
+	CHECK(GetTextExtentPoint32A(dc, text, (int)std::strlen(text), &extent));
+	SelectObject(dc, old); DeleteObject(font); DeleteDC(dc);
+	return (float)extent.cx;
+}
+static bool Overlap(const studio::Box& a, const studio::Box& b)
+{
+	return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
 static Settings Base(int w, int h)
 {
 	Settings s;
@@ -69,11 +87,14 @@ int main()
 {
 	// Studio covers every material row, with shared layout edges and clamped interaction math.
 	const auto tabs = studio::Tabs();
-	CHECK(tabs.size() == 11);
+	int topics = 2;
+	for (const Row& r : kRows) if ((r.kind == K_TOPIC || r.kind == K_TOPIC_CLOSED) && r.id != P_T_SHAPE && r.id != P_T_SHAPE2 && r.id != P_T_ANIM) topics++;
+	CHECK(tabs.size() == topics);
 	CHECK(std::strcmp(tabs[0].label, "Looks") == 0 && tabs[0].rows.empty());
-	CHECK(studio::kHeight == 520);
+	CHECK(!std::strcmp(tabs.back().label, "About"));
+	CHECK(studio::kLabelSize >= 12 && studio::kValueSize >= 12);
 	CHECK(studio::PanelWidth(100) == 280 && studio::PanelWidth(1000) == 800);
-	for (float width : { 280.f, 800.f }) {
+	for (float width : { 280.f, 420.f, 800.f }) {
 		const float bx[] = { 0.39f, 0.61f }, by[] = { 0.5f, 0.5f };
 		CHECK(studio::PanelWidth(width) == width);
 		const auto status = studio::StatusBox(width);
@@ -84,13 +105,21 @@ int main()
 		};
 		inside(studio::Header(width));
 		inside(studio::Hero(width));
+		CHECK(!Overlap(studio::Header(width), studio::Hero(width)));
+		CHECK(TextWidth("Dim background") <= studio::TabBox(0, width).w - 32);
 		for (int t = 0; t < (int)tabs.size(); t++) {
 			const auto button = studio::TabBox(t, width);
 			inside(button);
+			CHECK(TextWidth(tabs[t].label) <= button.w - 32);
+			CHECK(button.y >= studio::Hero(width).y + studio::Hero(width).h + 24);
+			CHECK(button.y + button.h <= studio::BodyTop(width) - 8);
+			for (int j = 0; j < t; j++) CHECK(!Overlap(button, studio::TabBox(j, width)));
 			CHECK((studio::HitTest(button.x + 2, button.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::TabButton, t }));
 			if (t == 0) for (int i = 0; i < kLookCount; i++) {
 				const auto card = studio::LookBox(i, width), thumb = studio::Thumbnail(card);
 				inside(card); inside(thumb);
+				CHECK(TextWidth(kLooks[i].name) <= card.w - 16);
+				for (int j = 0; j < i; j++) CHECK(!Overlap(card, studio::LookBox(j, width)));
 				CHECK((studio::HitTest(thumb.x + 2, thumb.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::LookCard, i }));
 				CHECK(thumb.x >= card.x && thumb.x + thumb.w <= card.x + card.w);
 				CHECK(thumb.y >= card.y && thumb.y + thumb.h <= card.y + card.h);
@@ -100,8 +129,12 @@ int main()
 				const Row& row = kRows[tabs[t].rows[n]];
 				inside(b);
 				CHECK((studio::HitTest(b.x + 2, b.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::Control, n }));
-				inside({ b.x - 8, b.y - 3, b.w + 16, b.h + 2 });
-				CHECK(b.y >= studio::BodyTop());
+				inside(studio::RowSurface(b));
+				const auto label = studio::RowLabel(b, row);
+				inside(label);
+				CHECK(TextWidth(row.label) <= label.w);
+				CHECK(b.y >= studio::BodyTop(width));
+				for (int j = 0; j < n; j++) CHECK(!Overlap(studio::RowSurface(b), studio::RowSurface(studio::RowBox(tabs[t], j, width))));
 				if (row.kind == K_FLOAT) {
 					const auto track = studio::Track(b);
 					inside(track);
@@ -124,9 +157,18 @@ int main()
 					for (int i = 0; i < count; i++) {
 						const auto segment = studio::Segment(b, i, count);
 						inside(segment);
+						CHECK(TextWidth(studio::Items(row.items)[i].c_str()) <= segment.w - 16);
+						CHECK(!Overlap(label, segment));
+						for (int j = 0; j < i; j++) CHECK(!Overlap(segment, studio::Segment(b, j, count)));
 						CHECK(segment.y + segment.h <= b.y + b.h);
 					}
 				}
+			}
+			if (t == (int)tabs.size() - 1) for (int i = 0; i < 2; i++) {
+				const auto link = studio::LinkBox(i, width);
+				inside(link);
+				CHECK(TextWidth(i ? "GitHub / Source & updates" : "LinkedIn / CGSudo") <= link.w - 40);
+				CHECK((studio::HitTest(link.x + 2, link.y + 2, width, tabs, t, bx, by) == studio::Hit{ studio::AboutLink, i }));
 			}
 		}
 	}
@@ -159,7 +201,15 @@ int main()
 			}
 		}
 	}
-	for (int n : covered) CHECK(n == 1);
+	for (int i = 0; i < kCoreCount; i++) CHECK(covered[i] == (i >= 9 && i <= 12 ? 2 : 1));
+	int quickTint = -1, colourTint = -2;
+	for (const auto& tab : tabs) for (int n : tab.rows) if (kRows[n].id == P_TINT) {
+		if (!std::strcmp(tab.label, "Quick adjust")) quickTint = n;
+		if (!std::strcmp(tab.label, "Colour")) colourTint = n;
+	}
+	CHECK(quickTint >= 0 && quickTint == colourTint);
+	CHECK(studio::RowByLabel("Tint colour") == quickTint);
+	CHECK(studio::RowByLabel("Nonexistent setting") == -1);
 	CHECK(std::fabs(studio::AngleAt(1, 0, 0, 0) - 90) < 0.001f);
 	CHECK(studio::AngleDelta(-179, 179) == 2);
 	float bx[] = { 0.38f, 0.62f }, by[] = { 0.5f, 0.5f };
@@ -205,6 +255,63 @@ int main()
 	bool opaque = true;
 	for (size_t i = 3; i < preview.size(); i += 4) opaque = opaque && preview[i] == 255;
 	CHECK(opaque);
+	// Text keeps separate glyphs even when the material's merge distance is large.
+	std::vector<unsigned char> letters;
+	CHECK(studio::LetterMasks(256, 184, letters));
+	CHECK(letters.size() == 256 * 184 * 2);
+	int lit[2] = {}, rightA = -1, leftA = 256;
+	for (int y = 0; y < 184; y++) for (int x = 0; x < 256; x++) {
+		const size_t at = size_t(y) * 256 + x;
+		CHECK(!(letters[at] && letters[256 * 184 + at]));
+		if (letters[at]) { lit[0]++; rightA = std::max(rightA, x); }
+		if (letters[256 * 184 + at]) { lit[1]++; leftA = std::min(leftA, x); }
+	}
+	CHECK(lit[0] > 100 && lit[1] > 100 && leftA - rightA >= 4);
+	float letterCore[kCoreCount]; std::copy(kDefaults, kDefaults + kCoreCount, letterCore);
+	std::vector<unsigned char> separate, merged, zeroMerge;
+	letterCore[20] = 200;
+	CHECK(studio::Preview(letterCore, 256, 184, bx, by, separate, &letters) == 0);
+	CHECK(studio::Preview(letterCore, 256, 184, bx, by, merged, &letters, true) == 0);
+	letterCore[20] = 0;
+	CHECK(studio::Preview(letterCore, 256, 184, bx, by, zeroMerge, &letters) == 0);
+	CHECK(separate == zeroMerge && separate != merged);
+	std::vector<unsigned char> scaled;
+	const std::vector<unsigned char> swatch = { 0, 0, 0, 255, 100, 100, 100, 255, 200, 200, 200, 255, 100, 100, 100, 255 };
+	studio::ScaleImage(swatch, 2, 2, 3, 3, scaled);
+	CHECK(scaled.size() == 36 && scaled[0] == 0 && scaled[16] == 100 && scaled[32] == 100 && scaled[19] == 255);
+	std::vector<std::vector<unsigned char>> thumbnails(kLookCount);
+	for (int i = 0; i < kLookCount; i++) {
+		float look[kCoreCount]; std::copy(kDefaults, kDefaults + kCoreCount, look); ApplyLook(i, look);
+		CHECK(studio::Preview(look, 112, 52, bx, by, thumbnails[i], nullptr, false, true, i) == 0);
+		for (int j = 0; j < i; j++) {
+			int difference = 0;
+			for (size_t at = 0; at < thumbnails[i].size(); at++) difference += std::abs(int(thumbnails[i][at]) - int(thumbnails[j][at]));
+			CHECK(difference > 1000);
+		}
+	}
+	for (int width : { 280, 420, 800 }) {
+		studio::Skin skin;
+		const auto t0 = std::chrono::steady_clock::now();
+		CHECK(skin.Ensure(width) == 0);
+		const double bake = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+		CHECK(skin.background.size() == size_t(width) * studio::kHeight * 4);
+		const auto* cached = skin.background.data();
+		const auto t1 = std::chrono::steady_clock::now();
+		for (int i = 0; i < 100; i++) {
+			CHECK(skin.Ensure(width) == 0);
+			CHECK(skin.Find(studio::Header((float)width), true));
+		}
+		const double reuse = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count() / 100;
+		CHECK(skin.bakes == 1 && skin.background.data() == cached);
+		const auto hero = studio::Hero((float)width), renderSize = studio::HeroRenderSize((float)width);
+		CHECK(renderSize.w <= 420 && renderSize.h <= hero.h);
+		const auto t2 = std::chrono::steady_clock::now();
+		CHECK(studio::Preview(kDefaults, (int)renderSize.w, (int)renderSize.h, bx, by, preview) == 0);
+		if (renderSize.w != hero.w) studio::ScaleImage(preview, (int)renderSize.w, (int)renderSize.h, (int)hero.w, (int)hero.h, scaled);
+		const double render = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t2).count();
+		printf("Studio %dpx bake %.1f ms, cached skin %.4f ms, hero %.1f ms (Drawbot upload needs app)\n", width, bake, reuse, render);
+		CHECK(skin.Ensure(width == 280 ? 420 : 280) == 0 && skin.bakes == 2);
+	}
 
 	// Every engine value is driven by exactly one row.
 	CHECK(lg_param_count() == kCoreCount);
