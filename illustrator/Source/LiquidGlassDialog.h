@@ -5,7 +5,7 @@
 
 constexpr int kParamCount = 42; // = glass_core::Params
 extern const float kDefaults[kParamCount];
-constexpr const char* kVersion = "0.7.3";
+constexpr const char* kVersion = "0.8.0";
 
 struct DialogHost {
 	void* parent = nullptr;                           // owner window (HWND)

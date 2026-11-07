@@ -1,16 +1,21 @@
 # Builds the one-click Windows installer: dist\LiquidGlass-for-Adobe-<ver>-Setup.exe.
-# It packs the Photoshop .ccx and the Illustrator .aip (both rebuilt here) with setup.html, the engine and the logo.
+# It rebuilds and packs the Photoshop, Illustrator and both After Effects plug-ins with the live engine tour.
 #   powershell -ExecutionPolicy Bypass -File setup\build.ps1 [-WebView2 <unpacked Microsoft.Web.WebView2 NuGet>]
 param([string]$WebView2 = "E:\AI\SDK\webview2\pkg")
 $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
 $root = Split-Path $here
 $ver = (Get-Content (Join-Path $root "photoshop\manifest.json") -Raw | ConvertFrom-Json).version
+& node (Join-Path $here 'ui.test.js')
+if ($LASTEXITCODE) { throw 'Setup UI self-check failed' }
 
 & powershell -ExecutionPolicy Bypass -File (Join-Path $root "install.ps1") -NoInstall
+if ($LASTEXITCODE) { throw "Photoshop packaging failed" }
 & powershell -ExecutionPolicy Bypass -File (Join-Path $root "illustrator\build.ps1") -NoInstall
 if ($LASTEXITCODE) { throw "Illustrator build failed" }
 Copy-Item (Join-Path $root "illustrator\build\LiquidGlass.aip") (Join-Path $root "dist") -Force
+& powershell -ExecutionPolicy Bypass -File (Join-Path $root "aftereffects\build.ps1") -NoInstall
+if ($LASTEXITCODE) { throw "After Effects build failed" }
 
 $obj = Join-Path $here "obj"
 New-Item -ItemType Directory -Force $obj | Out-Null
@@ -25,7 +30,8 @@ $bw.Write([uint16]1); $bw.Write([uint16]32); $bw.Write([uint32]$png.Length); $bw
 
 # Payload: RCDATA 101, 102, … in the order of the file list in setup.cpp's Extract().
 $files = "setup\setup.html", "setup\glass-worker.js", "setup\stage.js", "photoshop\looks.js", "photoshop\engine.js", "photoshop\glass_core.wasm",
-    "photoshop\logo.png", "dist\LiquidGlass-for-Adobe.ccx", "dist\LiquidGlass.aip"
+    "photoshop\logo.png", "dist\LiquidGlass-for-Adobe.ccx", "dist\LiquidGlass.aip",
+    "aftereffects\build\LiquidGlass.aex", "aftereffects\build\LiquidGlassBrightness.aex", "photoshop\index.js"
 $rc = "1 ICON `"$((Join-Path $obj 'icon.ico') -replace '\\', '\\')`"`n"
 $id = 101
 foreach ($f in $files) { $rc += "$id RCDATA `"$((Join-Path $root $f) -replace '\\', '\\')`"`n"; $id++ }
@@ -64,4 +70,6 @@ $cmd = "`"$vcvars`" >nul && cd /d `"$obj`" && rc /nologo /fo setup.res setup.rc 
     "user32.lib gdi32.lib shell32.lib ole32.lib dwmapi.lib advapi32.lib version.lib /MANIFESTUAC:`"level='asInvoker' uiAccess='false'`""
 cmd /c $cmd
 if ($LASTEXITCODE -or -not (Test-Path $out)) { throw "Setup build failed" }
+& node (Join-Path $here 'payload.test.js')
+if ($LASTEXITCODE) { throw 'Setup payload self-check failed' }
 Write-Host "Built $out"
