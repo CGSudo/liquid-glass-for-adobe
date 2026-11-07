@@ -1,6 +1,7 @@
 // Host logic without After Effects or Premiere: parameter mapping, looks, shapes, pixel formats, plus a 1080p timing.
 #include "../Source/GlassHost.h"
 #include "../Source/GlassStudioModel.h"
+#include "../Source/GlassPremiere.h"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -118,8 +119,69 @@ template <class P> static void MaskAndTintCase(PixFmt fmt)
 	CHECK(PixelAt<P>(clear.world, 12, 33)[P::A] == typename P::Chan(P::Max));
 }
 
+template <class P> static void PremiereCase(PixFmt fmt)
+{
+	Frame<typename P::Chan> bg(96, 64), source(96, 64), out(96, 64), other(96, 64);
+	for (int y = 0; y < 64; y++) for (int x = 0; x < 96; x++) {
+		auto* b = PixelAt<P>(bg.world, x, y);
+		b[P::R] = b[P::G] = b[P::B] = FromUnit<P>(0.2f + 0.5f * x / 96);
+		b[P::A] = FromUnit<P>(1);
+		auto* p = PixelAt<P>(source.world, x, y);
+		p[P::B] = FromUnit<P>(1);
+		p[P::A] = FromUnit<P>(y > 16 && y < 48 && ((x > 16 && x < 44) || (x > 48 && x < 78)) ? 1.f : 0.f);
+	}
+	Scratch sc;
+	Settings s = Base(96, 64);
+	s.core[4] = 0; // dispersion can colour a gradient even when the backdrop is neutral
+	CHECK(PremiereHasOutline<P>(source.world));
+	CHECK(!PremiereHasOutline<P>(bg.world));
+	CHECK(RenderPremiereFrame(fmt, s, source.world, out.world, nullptr, nullptr, true, sc) == 0);
+	CHECK(out.px == source.px); // no background must never manufacture black glass
+	CHECK(RenderPremiereFrame(fmt, s, source.world, out.world, nullptr, &bg.world, true, sc) == 0);
+	CHECK(out.px != bg.px && out.px != source.px);
+	for (int y = 0; y < 64; y++) for (int x = 0; x < 96; x++) {
+		const auto* p = PixelAt<P>(out.world, x, y);
+		CHECK(std::abs(float(p[P::R]) - float(p[P::B])) <= P::Max / 255 + 0.001f);
+		CHECK(p[P::A] == FromUnit<P>(1));
+		PixelAt<P>(source.world, x, y)[P::R] = FromUnit<P>(1);
+	}
+	CHECK(RenderPremiereFrame(fmt, s, source.world, other.world, nullptr, &bg.world, true, sc) == 0);
+	CHECK(out.px == other.px); // source RGB cannot tint the glass
+	CHECK(RenderPremiereFrame(fmt, s, bg.world, other.world, &source.world, nullptr, true, sc) == 0);
+	CHECK(out.px == other.px); // adjustment input and direct background share the renderer
+	Frame<typename P::Chan> empty(96, 64);
+	CHECK(RenderPremiereFrame(fmt, s, empty.world, out.world, nullptr, &bg.world, true, sc) == 0);
+	CHECK(out.px == bg.px); // the background suite delegates compositing even for an empty source
+	CHECK(RenderPremiereFrame(fmt, s, bg.world, out.world, &empty.world, nullptr, true, sc) == 0);
+	CHECK(out.px == bg.px);
+	CHECK(RenderPremiereFrame(fmt, s, bg.world, out.world, nullptr, nullptr, true, sc) == 0);
+	CHECK(out.px == bg.px); // plain opaque clips pass through
+	CHECK(PremiereRowByLabel("Tint amount") == IndexOf(P_TINT_AMT));
+	CHECK(PremiereRowByLabel("Liquid letters") == IndexOf(P_LIQUID_LETTERS));
+	CHECK(PremiereRowByLabel("No such parameter") == -1);
+	CHECK(RenderPremiereFrame(fmt, s, bg.world, out.world, &source.world, nullptr, true, sc) == 0);
+	s.core[20] = 0;
+	CHECK(RenderPremiereFrame(fmt, s, bg.world, other.world, &source.world, nullptr, true, sc) == 0);
+	CHECK(out.px != other.px); // separate alpha islands respond to Merge
+	CHECK(std::memcmp(PixelAt<P>(other.world, 46, 32), PixelAt<P>(bg.world, 46, 32), 4 * sizeof(typename P::Chan)) == 0);
+	s.core[12] = 0.8f; s.core[9] = 1; s.core[10] = s.core[11] = 0;
+	CHECK(RenderPremiereFrame(fmt, s, bg.world, out.world, &source.world, nullptr, true, sc) == 0);
+	const auto* tinted = PixelAt<P>(out.world, 30, 32);
+	CHECK(tinted[P::R] > tinted[P::B]);
+	s.noGlass = true;
+	auto* translucent = PixelAt<P>(source.world, 30, 32);
+	translucent[P::A] = FromUnit<P>(0.5f);
+	CHECK(RenderPremiereFrame(fmt, s, source.world, out.world, nullptr, &bg.world, true, sc) == 0);
+	const auto* mixed = PixelAt<P>(out.world, 30, 32);
+	const auto* behind = PixelAt<P>(bg.world, 30, 32);
+	CHECK(std::abs(float(mixed[P::R]) / P::Max - (1.f + float(behind[P::R]) / P::Max) * 0.5f) < 0.01f);
+	CHECK(mixed[P::A] == FromUnit<P>(1));
+}
+
 int main()
 {
+	PremiereCase<PxBGRA8>(FMT_BGRA8);
+	PremiereCase<PxBGRAF>(FMT_BGRAF);
 	// Studio covers every material row, with shared layout edges and clamped interaction math.
 	const auto tabs = studio::Tabs();
 #ifdef LG_BRIGHTNESS
@@ -283,6 +345,7 @@ int main()
 	// Ids are unique and every topic closes.
 	int depth = 0;
 	for (int i = 0; i < kRowCount; i++) {
+		CHECK(IndexOf(kRows[i].id) == i + 1);
 		for (int j = i + 1; j < kRowCount; j++) CHECK(kRows[i].id != kRows[j].id);
 		if (kRows[i].kind == K_TOPIC || kRows[i].kind == K_TOPIC_CLOSED) depth++;
 		if (kRows[i].kind == K_END) depth--;

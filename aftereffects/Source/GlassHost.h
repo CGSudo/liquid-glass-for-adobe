@@ -620,7 +620,7 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 	}
 
 	if (s.noGlass) return 0;
-	const World* alpha = s.ownLayer ? &in : shapeLayer ? shapeLayer : s.clipAlpha ? &in : nullptr;
+	const World* alpha = shapeLayer ? shapeLayer : (s.ownLayer || s.clipAlpha) ? &in : nullptr;
 	const Rect bounds = alpha ? AlphaBounds<P>(*alpha) : BuiltInBounds(s);
 	if (bounds.empty()) return 0;
 	const int margin = Margin(s.core, 1) + (MergeParts(s) ? (int)std::ceil(s.core[20] * 0.5f) : 0);
