@@ -2,12 +2,12 @@
 
 **Liquid Glass for Adobe** (by CGSudo; called Sudo Liquid Glass before 0.7.2) recreates Apple's Liquid Glass material inside Adobe apps. It is live and non-destructive: the glass reads what is behind it and re-renders, and it never merges or flattens layers.
 
-- **Today (v0.7.3):**
+- **Today (v0.8.0):**
   - **Photoshop:** a UXP plugin, Windows and macOS (wasm engine, no platform code; tested on Windows only).
   - **Illustrator:** a native Live Effect (`.aip`), **Windows only**.
-- **Built, not released yet:** one native effect (`aftereffects/`, `.aex`, Windows) for **After Effects and Premiere Pro**. Tested on Windows in both 2026 apps. It isn't in any release, Setup.exe or website copy: say so until the owner ships it.
+- **After Effects:** Windows, 2026 tested; Liquid Glass and Liquid Glass Brightness ship in 0.8.0. Premiere Pro is coming, not released.
 - **Goal:** Illustrator on Mac. This is a plan: never describe it as available.
-- **Packaging:** Photoshop `.ccx` (UXP; ZXP is for CEP extensions and doesn't apply). Illustrator `.aip`. Windows users get one `Setup.exe` (`setup/`) that installs both; Mac users double-click the `.ccx`.
+- **Packaging:** Photoshop `.ccx` (UXP; ZXP is for CEP extensions and doesn't apply). Illustrator `.aip`. Windows users get one `Setup.exe` (`setup/`) that installs all three; Mac users double-click the `.ccx`.
 - **Name:** never put "Adobe" first in the product name (Adobe's trademark rules); "… for Adobe" is the allowed form. Internal ids stay as they were: UXP id `com.liquidglass.photoshop`, localStorage key `sudoLiquidGlass.looks`, `%APPDATA%\Sudo Liquid Glass` (saved presets and log), so upgrades keep users' data.
 
 **New here with zero context?** Read [docs/PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md) first. It explains:
@@ -34,7 +34,7 @@ photoshop/*.test.js      engine.test.js / paths.test.js run the real wasm; ui.te
 preview/src/main.rs      renders preview*.png from a synthetic backdrop (engine test renders, not screenshots)
 illustrator/             native Live Effect: Source/*.cpp (render, notifier, menus, checks), ui/panel.html (settings
                          window, WebView2), build.ps1, test/run_test.ps1 (settings window without Illustrator)
-aftereffects/            one native effect for After Effects and Premiere Pro: Source/GlassHost.h (parameter table, looks, shapes, frame compositor; no SDK),
+aftereffects/            native After Effects effects (Premiere support in progress): Source/GlassHost.h (parameter table, looks, shapes, frame compositor; no SDK),
                          Source/LiquidGlassAE.cpp (SDK glue), build.ps1, params.test.js (in npm test), test/ (no-app test, verify_ae.ps1, verify_pr.ps1)
 setup/                   Windows Setup.exe: setup.cpp (Win32 + WebView2 on an acrylic window; installs via UPIA and an elevated
                          --copy-aip of itself; --silent for IT), setup.html (looks tour), build.ps1;
@@ -153,7 +153,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -NoInstall
   4. Build the Illustrator plug-in: `powershell -ExecutionPolicy Bypass -File illustrator/build.ps1 -NoInstall`, and copy `illustrator/build/LiquidGlass.aip` to `dist/`.
   5. Bump `kVersion` (illustrator/Source/LiquidGlassDialog.h), the version in `illustrator/ui/panel.html` and `photoshop/ui.test.js`; update `softwareVersion` in `docs/index.html`.
   6. Commit, then `powershell -ExecutionPolicy Bypass -File release.ps1`. It runs the tests and writes into `dist/release`:
-     - all-in-one: `LiquidGlass-for-Adobe-<ver>-Setup.exe` (Windows, both apps) and `…-AIO-Windows-Mac.zip`;
+     - all-in-one: `LiquidGlass-for-Adobe-<ver>-Setup.exe` (Windows, three apps) and `…-AIO-Windows-Mac.zip`;
      - each plugin: `LiquidGlass-for-Adobe-Photoshop-<ver>.ccx`, `LiquidGlass-for-Adobe-Illustrator-<ver>-Windows.zip`;
      - each plugin's source: `…-Photoshop-<ver>-source.zip`, `…-Illustrator-<ver>-source.zip`.
   7. Push, then attach every file in `dist/release` to the GitHub release (the owner wants all three groups).
@@ -167,10 +167,10 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -NoInstall
   - Lengths are stored in **pt** and converted to px (2 px per pt, capped at 4 MP) at render: `kLengths` lists them.
   - Tried and removed: a toolbar tool and Alt + double-click (did not work for the owner in Illustrator 2026).
   - **Mac:** needs an Xcode build on a Mac, the Mac SDK and a WKWebView settings window. Not started.
-- **After Effects and Premiere Pro (Windows, built, not released):** see [aftereffects/README.md](aftereffects/README.md).
-  - One `.aex` installed in `Common\Plug-ins\7.0\MediaCore\CGSudo`, which both apps load.
-  - Backdrop: the effect's input, usually on an adjustment layer. Mask: keyframeable shape parameters, because Premiere's layer pickers are weak; in After Effects, optionally a layer's alpha.
-  - Render: `lg_render` on the shape's bounds plus `Margin`; the rest of the frame passes through at full bit depth. After Effects uses SmartFX and MFR, Premiere `PF_Cmd_RENDER` with BGRA 8-bit and 32-bit float.
+- **After Effects (Windows, shipped); Premiere Pro (coming):** see [aftereffects/README.md](aftereffects/README.md).
+  - Apply Liquid Glass directly to a shape, text, image, footage or pre-comp. Input alpha defines glass; colour is ignored. Liquid Glass Brightness uses layer brightness. Text letters stay separate unless Liquid letters is enabled.
+  - An AEGP idle hook creates an empty adjustment shape layer named `Liquid Glass backdrop` directly below. `AEGP_NewFromUpstreamOfEffect` and `AEGP_RenderSuite5` read the backdrop through it; creation during sequence setup does not reach render threads.
+  - Glass Studio is a Drawbot control in Effect Controls. Install the effects into After Effects only until Premiere is verified, not MediaCore.
   - Testing next to someone's open After Effects: `AfterFX.exe -m -r` starts a second instance that may reopen their last project, so the test script checks an environment variable only that launch has. Never force-kill a test instance: the next launch shows the Crash Repair prompt.
 - **Engine work that helps every host:**
   - linear-light blur and refraction;

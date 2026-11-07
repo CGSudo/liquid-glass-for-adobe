@@ -12,6 +12,10 @@ For the code-level contract, read [AGENTS.md](../AGENTS.md) next.
 
 ---
 
+## 0. 0.8.0 handoff
+
+The owner confirmed the main effect on normal AE shape and text layers in After Effects 2026 on Windows. Input alpha defines glass; colour is ignored. An AEGP idle hook creates an empty adjustment shape layer directly below, named Liquid Glass backdrop; creating it during sequence setup did not reach render threads. AEGP_NewFromUpstreamOfEffect and AEGP_RenderSuite5 read the artwork below through that helper. Glass Studio is a Drawbot control in Effect Controls. Liquid Glass Brightness adds a brightness-derived mask. The release installs AE effects only into After Effects, not MediaCore, until Premiere is verified. Premiere is coming, not released. Remaining layer types, transforms and Brightness require real-app verification.
+
 ## 1. Mission and vision
 
 **Mission.** Give designers Apple's **Liquid Glass** look (iOS 26 / macOS Tahoe) inside Adobe apps as a **live, non-destructive, one-click effect**, the way Figma does it.
@@ -22,7 +26,7 @@ For the code-level contract, read [AGENTS.md](../AGENTS.md) next.
 - **One engine, every Adobe app.** A single fast Rust renderer serves every host through a tiny C ABI:
   - Photoshop (done, Windows and macOS);
   - Illustrator (done on Windows; Mac planned);
-  - After Effects and Premiere Pro (planned: one AE-SDK effect plugin works in both).
+  - After Effects (Windows, 2026 tested); Premiere Pro support is in progress.
 - **High-end, branded, simple to use.** It's a SUDO brand asset: compact, with plain-language explanations on hover, so non-experts understand every control.
 - **Honest and open.** MIT licence. Public claims must match tested reality.
 
@@ -267,7 +271,7 @@ The owner confirmed: **"All working"** (v0.5.5).
   - README: `docs/explainer.webp`, a 17 s recording of the stage in four steps (your shape, Make Glass, move it, the 9 looks). WebP, because the GIF was 14.5 MB and the WebP 1.9 MB.
 
 ### Phase 17: After Effects and Premiere Pro (built, not released)
-- **"Give me After Effects and Premiere Pro with every setting, plus animation, fast and low on memory."** Built `aftereffects/`: one `.aex` for both apps, sharing the Rust engine. Details and decisions: [aftereffects/README.md](../aftereffects/README.md).
+- **"Give me After Effects and Premiere Pro with every setting, plus animation, fast and low on memory."** Built `aftereffects/` with a shared Rust engine; Premiere support remains in progress. Details and decisions: [aftereffects/README.md](../aftereffects/README.md).
 - **Backdrop and shape:** the effect's own input is the backdrop, and the shape is keyframeable parameters (rounded rectangle, ellipse, pill; centre, size, radius, rotation), because Premiere's layer pickers are weak. In After Effects, a layer's alpha can replace the shape; "Use clip alpha as shape" and "Backdrop layer" cover applying it directly on text.
 - **Result rect differs from the brief:** the brief asked to limit the result rect to the shape plus shadow. An effect's output replaces its whole layer, so the rest of the frame has to pass through. The saving comes from running the engine only on the shape's bounds plus its reach.
 - **Animation added:** everything keyframeable, Wobble, Light follows motion, and a second shape that merges. No `.ffx` presets: After Effects has no scripting call to save one.
@@ -293,7 +297,7 @@ The owner confirmed: **"All working"** (v0.5.5).
 | Adobe UPIA (`UnifiedPluginInstallerAgent`) | installs `.ccx` from the command line | Windows: `/install`, `/remove`, `/list all`; macOS: `--install` |
 | Illustrator SDK 2026 (owner download, `E:\AI\SDK`) | Illustrator Live Effect | licence forbids committing it |
 | After Effects SDK 27.0 (Adobe Developer Console, `E:\AI\SDK\AE_SDK`) | After Effects / Premiere effect | licence forbids committing it; `aftereffects/build.ps1` uses its `PiPLTool.exe` |
-| Adobe After Effects 2026, Premiere Pro 2026 | hosts | `aerender.exe` renders test projects; both load `Common\Plug-ins\7.0\MediaCore` |
+| Adobe After Effects 2026, Premiere Pro 2026 | hosts | `aerender.exe` renders test projects; release effects install into After Effects only |
 
 Dev loop for Photoshop:
 1. Edit the code.
@@ -324,7 +328,7 @@ Dev loop for Photoshop:
    - a Mac build (Xcode, Mac SDK, a WKWebView settings window);
    - confirm the background notifier and the refusals on more documents;
    - optional: engine-rendered look thumbnails in the Illustrator window (Photoshop has them).
-4. **After Effects / Premiere:** ship it (Setup.exe, `release.ps1`, website), which is the owner's call. Then: an f32 engine path so deep colour isn't 8-bit inside the glass, and animation presets.
+4. **After Effects / Premiere:** verify remaining AE transform and Brightness cases in the real app and continue Premiere development.
 5. **Engine:**
    - linear-light blending;
    - GPU path;
