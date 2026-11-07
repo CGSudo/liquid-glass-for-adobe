@@ -75,6 +75,8 @@ enum ParamId {
 	P_T_GRAIN, P_GRAIN, P_GRAIN_SIZE, P_E_GRAIN,
 	P_T_ADV, P_EMBOSS, P_RIM, P_IOR, P_SHEEN, P_E_ADV,
 	P_T_ANIM, P_WOBBLE, P_WOBBLE_SPEED, P_E_ANIM,
+	P_LIQUID_LETTERS,
+	P_T_LUMA, P_THRESHOLD, P_MASK_SOFTNESS, P_INVERT, P_E_LUMA,
 };
 
 enum Kind { K_TOPIC, K_TOPIC_CLOSED, K_END, K_FLOAT, K_ANGLE, K_COLOR, K_POPUP, K_CHECK, K_POINT, K_LAYER, K_LOOK };
@@ -129,6 +131,7 @@ const Row kRows[] = {
 	{ P_SOFT, K_FLOAT, 6, "Edge softness", 0, 100, 30, 0, nullptr },
 	{ P_DISP, K_FLOAT, 4, "Dispersion", 0, 100, 20, 0, nullptr },
 	{ P_MERGE, K_FLOAT, 20, "Merge", 0, 200, 24, 0, nullptr },
+	{ P_LIQUID_LETTERS, K_CHECK, -1, "Liquid letters", 0, 1, 0, 0, nullptr },
 	{ P_E_LENS, K_END, -1, nullptr, 0, 0, 0, 0, nullptr },
 
 	{ P_T_LIGHT, K_TOPIC, -1, "Light", 0, 0, 0, 0, nullptr },
@@ -187,6 +190,13 @@ const Row kRows[] = {
 	{ P_WOBBLE, K_FLOAT, -1, "Wobble", 0, 100, 0, 1, nullptr },
 	{ P_WOBBLE_SPEED, K_FLOAT, -1, "Wobble speed", 0, 10, 1, 2, nullptr },
 	{ P_E_ANIM, K_END, -1, nullptr, 0, 0, 0, 0, nullptr },
+#ifdef LG_BRIGHTNESS
+	{ P_T_LUMA, K_TOPIC, -1, "Brightness shape", 0, 0, 0, 0, nullptr },
+	{ P_THRESHOLD, K_FLOAT, -1, "Threshold", 0, 1, 0.5f, 2, nullptr },
+	{ P_MASK_SOFTNESS, K_FLOAT, -1, "Softness", 0, 1, 1, 2, nullptr },
+	{ P_INVERT, K_CHECK, -1, "Invert", 0, 1, 0, 0, nullptr },
+	{ P_E_LUMA, K_END, -1, nullptr, 0, 0, 0, 0, nullptr },
+#endif
 };
 const int kRowCount = sizeof kRows / sizeof kRows[0];
 
@@ -212,9 +222,66 @@ struct Settings {
 	Shape shape[2];
 	bool second = false, clipAlpha = false, follow = false;
 	bool noGlass = false; // the input passes through untouched
-	bool ownLayer = false; // on the user's shape or text layer: its alpha is the outline, and separate parts fuse
+	bool ownLayer = false; // the user's layer supplies the outline, not the backdrop
+	bool textLayer = false, liquidLetters = false, brightnessMask = false, invertMask = false;
+	float threshold = 0.5f, maskSoftness = 1;
+	// Row-vector homography from render pixels to backdrop pixels; identity for already transformed inputs.
+	double backdropMap[3][3] = { {1, 0, 0}, {0, 1, 0}, {0, 0, 1} };
 	float wobble = 0, wobbleSpeed = 1, seconds = 0;
 };
+
+inline bool MergeParts(const Settings& s) { return s.ownLayer && (!s.textLayer || s.liquidLetters); }
+
+// SDK matrices use row vectors; the translation is in the last row, and includes the parent chain.
+inline void BackdropMap(const double layer[4][4], double dx, double dy, double map[3][3])
+{
+	const int axis[] = { 0, 1, 3 };
+	const double scale[] = { dx, dy, 1 };
+	for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)
+		map[i][j] = layer[axis[i]][axis[j]] * scale[j] / scale[i];
+}
+
+// Invert the camera pose before projecting the layer plane, including parented cameras.
+inline bool CameraBackdropMap(const double layer[4][4], const double camera[4][4], double zoom, double width, double height,
+	double dx, double dy, double map[3][3])
+{
+	double a[4][8] = {};
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 4; j++) a[i][j] = camera[i][j];
+		a[i][i + 4] = 1;
+	}
+	for (int c = 0; c < 4; c++) {
+		int pivot = c;
+		for (int r = c + 1; r < 4; r++) if (std::fabs(a[r][c]) > std::fabs(a[pivot][c])) pivot = r;
+		if (!std::isfinite(a[pivot][c]) || std::fabs(a[pivot][c]) < 1e-12) return false;
+		for (int j = 0; j < 8; j++) std::swap(a[c][j], a[pivot][j]);
+		const double divisor = a[c][c];
+		for (double& v : a[c]) v /= divisor;
+		for (int r = 0; r < 4; r++) if (r != c) {
+			const double factor = a[r][c];
+			for (int j = 0; j < 8; j++) a[r][j] -= factor * a[c][j];
+		}
+	}
+	double projected[4][4] = {};
+	for (int i = 0; i < 4; i++) {
+		double view[3] = {};
+		for (int j = 0; j < 3; j++) for (int k = 0; k < 4; k++) view[j] += layer[i][k] * a[k][j + 4];
+		projected[i][0] = view[0] * zoom + view[2] * width * 0.5;
+		projected[i][1] = view[1] * zoom + view[2] * height * 0.5;
+		projected[i][3] = view[2];
+	}
+	BackdropMap(projected, dx, dy, map);
+	return true;
+}
+
+inline bool MapBackdrop(const double map[3][3], double x, double y, double& u, double& v)
+{
+	const double z = x * map[0][2] + y * map[1][2] + map[2][2];
+	if (!std::isfinite(z) || z <= 1e-9) return false;
+	u = (x * map[0][0] + y * map[1][0] + map[2][0]) / z;
+	v = (x * map[0][1] + y * map[1][1] + map[2][1]) / z;
+	return std::isfinite(u) && std::isfinite(v);
+}
 
 // Full-resolution lengths → this render's pixels. Centres arrive already scaled from the host.
 inline void ScaleToBuffer(Settings& s, float ds)
@@ -370,6 +437,18 @@ template <class P> inline typename P::Chan* PixelAt(const World& w, int x, int y
 
 inline unsigned char ToByte(float v) { return (unsigned char)(std::min(std::max(v, 0.f), 1.f) * 255 + 0.5f); }
 
+template <class P> inline unsigned char LayerMask(const typename P::Chan* px, const Settings& s)
+{
+	const float alpha = std::clamp(float(px[P::A]) / P::Max, 0.f, 1.f);
+	if (!std::isfinite(alpha)) return 0;
+	if (!s.brightnessMask) return ToByte(alpha);
+	float luma = (0.2126f * px[P::R] + 0.7152f * px[P::G] + 0.0722f * px[P::B]) / P::Max;
+	if (!std::isfinite(luma) || !std::isfinite(alpha)) return 0;
+	luma = std::clamp(luma, 0.f, 1.f);
+	const float coverage = s.maskSoftness > 0 ? std::clamp((luma - s.threshold) / s.maskSoftness + 0.5f, 0.f, 1.f) : (luma >= s.threshold ? 1.f : 0.f);
+	return ToByte((s.invertMask ? 1.f - coverage : coverage) * alpha);
+}
+
 template <class P> inline typename P::Chan FromUnit(float v)
 {
 	if (P::Max == 1.f) return (typename P::Chan)v; // float keeps its range
@@ -424,6 +503,32 @@ template <class P> void FillBackdrop(const World& back, const Rect& roi, Scratch
 			}
 			d[3] = 255;
 		}
+	}
+}
+
+// Pull comp pixels into layer space; AE applies the layer transform to our output after the effect.
+inline void FillMappedBackdrop(const World& back, const Rect& roi, const Settings& s, Scratch& sc)
+{
+	const Rect br = back.rect();
+	for (int y = roi.t; y < roi.b; y++) for (int x = roi.l; x < roi.r; x++) {
+		unsigned char* d = sc.backdrop.data() + (size_t(y - roi.t) * roi.w() + x - roi.l) * 4;
+		double u = 0, v = 0;
+		if (!back.data || br.empty() || !MapBackdrop(s.backdropMap, x + 0.5, y + 0.5, u, v)) {
+			d[0] = d[1] = d[2] = 0; d[3] = 255;
+			continue;
+		}
+		u = std::clamp(u - 0.5, double(br.l), double(br.r - 1));
+		v = std::clamp(v - 0.5, double(br.t), double(br.b - 1));
+		const int ix = int(std::floor(u)), iy = int(std::floor(v));
+		const float fx = float(u - ix), fy = float(v - iy);
+		float rgb[3] = {};
+		for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+			const auto* p = PixelAt<PxARGB8>(back, std::min(ix + i, br.r - 1), std::min(iy + j, br.b - 1));
+			const float weight = (i ? fx : 1 - fx) * (j ? fy : 1 - fy) * p[0] / (255.f * 255.f);
+			for (int c = 0; c < 3; c++) rgb[c] += p[c + 1] * weight;
+		}
+		for (int c = 0; c < 3; c++) d[c] = ToByte(rgb[c]);
+		d[3] = 255;
 	}
 }
 
@@ -502,7 +607,7 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 	const size_t pxBytes = 4 * sizeof(T);
 
 	// Pass-through. Clip-alpha mode outputs the glass alone: the layer below shows around it.
-	const Rect both = Clip(outR, s.clipAlpha ? Rect{} : in.rect());
+	const Rect both = Clip(outR, s.clipAlpha && !s.noGlass ? Rect{} : in.rect());
 	for (int y = outR.t; y < outR.b; y++) {
 		T* o = PixelAt<P>(out, outR.l, y);
 		if (y < both.t || y >= both.b || both.empty()) {
@@ -515,10 +620,10 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 	}
 
 	if (s.noGlass) return 0;
-	const World* alpha = shapeLayer ? shapeLayer : s.clipAlpha ? &in : nullptr;
+	const World* alpha = s.ownLayer ? &in : shapeLayer ? shapeLayer : s.clipAlpha ? &in : nullptr;
 	const Rect bounds = alpha ? AlphaBounds<P>(*alpha) : BuiltInBounds(s);
 	if (bounds.empty()) return 0;
-	const int margin = Margin(s.core, 1) + (s.ownLayer ? (int)std::ceil(s.core[20] * 0.5f) : 0);
+	const int margin = Margin(s.core, 1) + (MergeParts(s) ? (int)std::ceil(s.core[20] * 0.5f) : 0);
 	// Buffer reaches `margin` past the frame so a shape cut by the frame edge has no false edge there.
 	const Rect roi = Clip(Grow(bounds, margin), Grow(outR, margin));
 	if (roi.empty() || Clip(roi, outR).empty()) return 0;
@@ -531,16 +636,16 @@ template <class P> int RenderFrameT(const Settings& s, const World& in, const Wo
 		for (int y = a.t; y < a.b; y++) {
 			const T* row = PixelAt<P>(*alpha, a.l, y);
 			unsigned char* m = sc.mask.data() + size_t(y - roi.t) * w + (a.l - roi.l);
-			for (int x = 0; x < a.w(); x++) m[x] = ToByte((float)row[x * 4 + P::A] / P::Max);
+			for (int x = 0; x < a.w(); x++) m[x] = LayerMask<P>(row + x * 4, s);
 		}
 	} else {
 		BuildMask(s, roi, sc);
 	}
-	if (s.ownLayer) FuseParts(sc.mask.data(), w, h, s.core[20] * 0.5f, sc);
+	if (MergeParts(s)) FuseParts(sc.mask.data(), w, h, s.core[20] * 0.5f, sc);
 
 	// Backdrop to RGBA8.
 	sc.backdrop.resize(n * 4);
-	if (under8) FillBackdrop<PxARGB8>(*under8, roi, sc);
+	if (under8) FillMappedBackdrop(*under8, roi, s, sc);
 	else FillBackdrop<P>(backLayer ? *backLayer : in, roi, sc);
 
 	sc.glass.resize(n * 4);

@@ -168,7 +168,8 @@ static std::string Status(PF_InData* in, PF_OutData* out)
 	AEGP_ObjectType type = AEGP_ObjectType_NONE;
 	AEGP_LayerFlags flags = 0;
 	if (pfi->AEGP_GetEffectLayer(in->effect_ref, &layer) || !layer || ls->AEGP_GetLayerObjectType(layer, &type) || ls->AEGP_GetLayerFlags(layer, &flags)) return "Layer status unavailable";
-	if ((type != AEGP_ObjectType_VECTOR && type != AEGP_ObjectType_TEXT) || (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER)) return "Put this effect on a shape or text layer";
+	if (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER) return "Adjustment layer - uses input backdrop and Glass shape";
+	if (!OwnLayerType(type, flags) || !HasVideo(in, ls.get(), layer, type)) return "Use a shape, text, footage, solid or pre-comp layer";
 	AEGP_CompH comp = nullptr;
 	A_long at = 0, count = 0;
 	if (ls->AEGP_GetLayerParentComp(layer, &comp) || ls->AEGP_GetLayerIndex(layer, &at) || ls->AEGP_GetCompNumLayers(comp, &count)) return "Layer status unavailable";

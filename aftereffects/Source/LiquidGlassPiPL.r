@@ -15,8 +15,8 @@ resource 'PiPL' (16000) {
 		AE_Effect_Info_Flags { 0 },
 		/* DEEP_COLOR_AWARE | I_EXPAND_BUFFER | CUSTOM_UI, must match GlobalSetup */
 		AE_Effect_Global_OutFlags { 0x02008200 },
-		/* PARAM_GROUP_START_COLLAPSED | SMART_RENDER | FLOAT_COLOR_AWARE | I_MIX_GUID_DEPENDENCIES | THREADED_RENDERING */
-		AE_Effect_Global_OutFlags_2 { 0x08201408 },
+		/* PARAM_GROUP_START_COLLAPSED | SMART_RENDER | FLOAT_COLOR_AWARE | I_MIX_GUID_DEPENDENCIES | THREADED_RENDERING | I_USE_3D_CAMERA */
+		AE_Effect_Global_OutFlags_2 { 0x0820140A },
 		AE_Effect_Match_Name { LG_MATCH },
 		AE_Reserved_Info { 8 },
 		AE_Effect_Support_URL { "https://github.com/CGSudo/liquid-glass-for-adobe" }

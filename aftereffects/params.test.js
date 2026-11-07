@@ -43,4 +43,27 @@ for (const m of header.matchAll(/K_(ANGLE|POPUP|COLOR), (\d+),/g)) {
 }
 assert.strictEqual(driven.size, DEFAULTS.length, "a param has no control");
 
+// Saved IDs stay append-only; the Lens checkbox moves later runtime indices by exactly one.
+const ids = header.match(/enum ParamId \{([\s\S]*?)\};/)[1].match(/P_\w+/g);
+assert.strictEqual(ids.indexOf("P_E_ANIM") + 1, 80);
+assert.strictEqual(ids.indexOf("P_LIQUID_LETTERS") + 1, 81);
+assert.deepStrictEqual(ids.slice(81), ["P_T_LUMA", "P_THRESHOLD", "P_MASK_SOFTNESS", "P_INVERT", "P_E_LUMA"]);
+const table = header.match(/const Row kRows\[\] = \{([\s\S]*?)\n\};/)[1];
+const mainTable = table.replace(/#ifdef LG_BRIGHTNESS[\s\S]*?#endif/g, "");
+const rowIds = (text) => [...text.matchAll(/\{ (P_\w+), K_/g)].map((m) => m[1]);
+const mainIds = rowIds(mainTable), brightnessIds = rowIds(table);
+assert.deepStrictEqual(mainIds.filter((id) => id !== "P_LIQUID_LETTERS"), ids.slice(0, 80));
+assert.strictEqual(mainIds.indexOf("P_LIQUID_LETTERS"), mainIds.indexOf("P_MERGE") + 1);
+assert.deepStrictEqual(brightnessIds.slice(0, mainIds.length), mainIds);
+assert.deepStrictEqual(brightnessIds.slice(mainIds.length), ids.slice(81));
+assert.match(mainTable, /P_LIQUID_LETTERS, K_CHECK, -1, "Liquid letters", 0, 1, 0,/);
+assert.match(table, /P_THRESHOLD, K_FLOAT, -1, "Threshold", 0, 1, 0.5f,/);
+assert.match(table, /P_MASK_SOFTNESS, K_FLOAT, -1, "Softness", 0, 1, 1,/);
+
+const names = fs.readFileSync(path.join(__dirname, "Source/LiquidGlassNames.h"), "utf8");
+for (const name of ["Liquid Glass", "Liquid Glass (test)", "Liquid Glass Brightness", "Liquid Glass Brightness (test)"]) {
+  assert.ok(names.includes(`LG_NAME "${name}"`), `missing identity: ${name}`);
+}
+assert.strictEqual(new Set([...names.matchAll(/#define LG_MATCH "([^"]+)"/g)].map((m) => m[1])).size, 4);
+
 console.log("aftereffects params: ok");

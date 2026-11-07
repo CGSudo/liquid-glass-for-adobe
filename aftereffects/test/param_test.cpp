@@ -65,11 +65,68 @@ template <class P> static void FormatCase(PixFmt fmt, const Frame<uint8_t>& ref)
 	CHECK(mid[P::A] == (typename P::Chan)P::Max);
 }
 
+template <class P> static void MaskAndTintCase(PixFmt fmt)
+{
+	Settings s = Base(40, 40);
+	s.brightnessMask = true;
+	typename P::Chan pixel[4] = {};
+	pixel[P::A] = FromUnit<P>(0.5f);
+	pixel[P::R] = FromUnit<P>(1);
+	CHECK(std::abs(int(LayerMask<P>(pixel, s)) - 27) <= 1);
+	pixel[P::R] = 0; pixel[P::G] = FromUnit<P>(1);
+	CHECK(std::abs(int(LayerMask<P>(pixel, s)) - 91) <= 1);
+	pixel[P::G] = 0; pixel[P::B] = FromUnit<P>(1);
+	CHECK(std::abs(int(LayerMask<P>(pixel, s)) - 9) <= 1);
+	pixel[P::R] = pixel[P::G] = FromUnit<P>(1);
+	CHECK(std::abs(int(LayerMask<P>(pixel, s)) - 128) <= 1);
+	s.invertMask = true;
+	CHECK(LayerMask<P>(pixel, s) == 0);
+	pixel[P::R] = pixel[P::G] = pixel[P::B] = 0;
+	CHECK(std::abs(int(LayerMask<P>(pixel, s)) - 128) <= 1);
+	pixel[P::A] = 0;
+	CHECK(LayerMask<P>(pixel, s) == 0);
+	pixel[P::A] = FromUnit<P>(1); pixel[P::R] = FromUnit<P>(1);
+	s.invertMask = false; s.maskSoftness = 0;
+	CHECK(LayerMask<P>(pixel, s) == 0);
+	s.threshold = 0.2f;
+	CHECK(LayerMask<P>(pixel, s) == 255);
+	s.maskSoftness = 0.2f;
+	CHECK(std::abs(int(LayerMask<P>(pixel, s)) - 144) <= 1);
+
+	Frame<typename P::Chan> in(40, 40, -8, 13), clear(40, 40, -8, 13), tint(40, 40, -8, 13);
+	Frame<uint8_t> backdrop(60, 60);
+	Gradient<P>(in); Gradient<PxARGB8>(backdrop);
+	s = Base(40, 40);
+	s.ownLayer = s.clipAlpha = true;
+	s.core[20] = 0;
+	Scratch sc;
+	CHECK(RenderFrame(fmt, s, in.world, clear.world, nullptr, nullptr, sc, &backdrop.world) == 0);
+	s.core[9] = 1; s.core[10] = s.core[11] = 0; s.core[12] = 1;
+	CHECK(RenderFrame(fmt, s, in.world, tint.world, nullptr, nullptr, sc, &backdrop.world) == 0);
+	const auto* c = PixelAt<P>(clear.world, 12, 33);
+	const auto* t = PixelAt<P>(tint.world, 12, 33);
+	CHECK(t[P::R] > c[P::R] && t[P::G] < c[P::G] && t[P::B] < c[P::B]);
+	// Input RGB never supplies the material in the alpha path.
+	for (size_t i = 0; i < in.px.size(); i += 4) in.px[i + P::R] = in.px[i + P::G] = in.px[i + P::B] = 0;
+	CHECK(RenderFrame(fmt, s, in.world, clear.world, nullptr, nullptr, sc, &backdrop.world) == 0);
+	CHECK(clear.px == tint.px);
+	s.brightnessMask = true;
+	CHECK(RenderFrame(fmt, s, in.world, clear.world, nullptr, nullptr, sc, &backdrop.world) == 0);
+	CHECK(PixelAt<P>(clear.world, 12, 33)[P::A] == 0);
+	s.invertMask = true;
+	CHECK(RenderFrame(fmt, s, in.world, clear.world, nullptr, nullptr, sc, &backdrop.world) == 0);
+	CHECK(PixelAt<P>(clear.world, 12, 33)[P::A] == typename P::Chan(P::Max));
+}
+
 int main()
 {
 	// Studio covers every material row, with shared layout edges and clamped interaction math.
 	const auto tabs = studio::Tabs();
+#ifdef LG_BRIGHTNESS
+	CHECK(tabs.size() == 12);
+#else
 	CHECK(tabs.size() == 11);
+#endif
 	CHECK(std::strcmp(tabs[0].label, "Looks") == 0 && tabs[0].rows.empty());
 	CHECK(studio::kHeight == 520);
 	CHECK(studio::PanelWidth(100) == 280 && studio::PanelWidth(1000) == 800);
@@ -233,6 +290,74 @@ int main()
 	}
 	CHECK(depth == 0);
 	CHECK(IndexOf(P_LOOK) == 1);
+	for (int id = P_LOOK; id <= P_E_ANIM; id++) CHECK(IndexOf(id) == id + (id > P_MERGE ? 1 : 0));
+	CHECK(IndexOf(P_LIQUID_LETTERS) == IndexOf(P_MERGE) + 1);
+	CHECK(kRows[IndexOf(P_LIQUID_LETTERS) - 1].dflt == 0);
+#ifdef LG_BRIGHTNESS
+	CHECK(IndexOf(P_T_LUMA) == IndexOf(P_E_ANIM) + 1);
+	CHECK(IndexOf(P_E_LUMA) == kRowCount);
+#else
+	CHECK(IndexOf(P_THRESHOLD) == -1 && IndexOf(P_MASK_SOFTNESS) == -1 && IndexOf(P_INVERT) == -1);
+#endif
+
+	MaskAndTintCase<PxARGB8>(FMT_ARGB8);
+	MaskAndTintCase<PxARGB16>(FMT_ARGB16);
+	MaskAndTintCase<PxARGBF>(FMT_ARGBF);
+	{
+		Settings s = Base(60, 40);
+		s.ownLayer = s.clipAlpha = s.textLayer = true;
+		s.core[20] = 12;
+		Frame<uint8_t> in(60, 40), out(60, 40), back(60, 40);
+		Gradient<PxARGB8>(back);
+		for (int y = 10; y < 30; y++) for (int x = 10; x < 45; x++)
+			if (x < 25 || x >= 30) PixelAt<PxARGB8>(in.world, x, y)[0] = 255;
+		Scratch sc;
+		CHECK(!MergeParts(s));
+		CHECK(RenderFrame(FMT_ARGB8, s, in.world, out.world, nullptr, nullptr, sc, &back.world) == 0);
+		CHECK(PixelAt<PxARGB8>(out.world, 27, 20)[0] == 0);
+		s.liquidLetters = true;
+		CHECK(MergeParts(s));
+		CHECK(RenderFrame(FMT_ARGB8, s, in.world, out.world, nullptr, nullptr, sc, &back.world) == 0);
+		CHECK(PixelAt<PxARGB8>(out.world, 27, 20)[0] > 0);
+		s.textLayer = false; s.liquidLetters = false;
+		CHECK(MergeParts(s));
+		s.noGlass = true;
+		CHECK(RenderFrame(FMT_ARGB8, s, in.world, out.world, nullptr, nullptr, sc, &back.world) == 0);
+		CHECK(out.px == in.px);
+	}
+	{
+		// Combined anchor/rotation/nonuniform scale/parent translation, with unequal downsample and buffer origins.
+		const double matrix[4][4] = { {0, 2, 0, 0}, {-3, 0, 0, 0}, {0, 0, 1, 0}, {130, 40, 0, 1} };
+		Settings s = Base(1, 1);
+		BackdropMap(matrix, 0.5, 0.25, s.backdropMap);
+		double u = 0, v = 0;
+		CHECK(MapBackdrop(s.backdropMap, 5, 5, u, v));
+		CHECK(std::fabs(u - 35) < 1e-6 && std::fabs(v - 15) < 1e-6);
+		Frame<uint8_t> back(100, 60, -10, -10);
+		Gradient<PxARGB8>(back);
+		Scratch a, b;
+		a.backdrop.resize(4); b.backdrop.resize(4);
+		FillMappedBackdrop(back.world, { 5, 5, 6, 6 }, s, a);
+		CHECK(MapBackdrop(s.backdropMap, 5.5, 5.5, u, v));
+		CHECK(std::abs(int(a.backdrop[0]) - int((u - 0.5 + 10) * 255 / 100)) <= 2);
+		CHECK(std::abs(int(a.backdrop[1]) - int((v - 0.5 + 10) * 255 / 60)) <= 2);
+		s = Base(1, 1);
+		FillMappedBackdrop(back.world, { -3, 17, -2, 18 }, s, a);
+		FillBackdrop<PxARGB8>(back.world, { -3, 17, -2, 18 }, b);
+		CHECK(a.backdrop == b.backdrop);
+		const double layer[4][4] = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1} };
+		double camera[4][4] = { {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {100, 50, -200, 1} };
+		CHECK(CameraBackdropMap(layer, camera, 200, 200, 100, 0.5, 0.25, s.backdropMap));
+		CHECK(MapBackdrop(s.backdropMap, 5, 5, u, v) && std::fabs(u - 5) < 1e-6 && std::fabs(v - 5) < 1e-6);
+		camera[3][2] = -400;
+		CHECK(CameraBackdropMap(layer, camera, 200, 200, 100, 1, 1, s.backdropMap));
+		CHECK(MapBackdrop(s.backdropMap, 0, 0, u, v) && std::fabs(u - 50) < 1e-6 && std::fabs(v - 25) < 1e-6);
+		camera[3][2] = 200;
+		CHECK(CameraBackdropMap(layer, camera, 200, 200, 100, 1, 1, s.backdropMap));
+		CHECK(!MapBackdrop(s.backdropMap, 5, 5, u, v));
+		camera[2][2] = 0;
+		CHECK(!CameraBackdropMap(layer, camera, 200, 200, 100, 1, 1, s.backdropMap));
+	}
 
 	// Looks keep edge width and merge.
 	float core[kCoreCount];

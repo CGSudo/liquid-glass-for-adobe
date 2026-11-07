@@ -1,8 +1,7 @@
-// Liquid Glass as one effect plug-in for After Effects and Premiere Pro (Effects > CGSudo > Liquid Glass).
-//
-// The effect's own input is the backdrop, so it goes on an adjustment layer (or directly on a clip); the glass shape is
-// keyframeable parameters, which work the same in both apps. In After Effects a layer's alpha can replace the shape.
-// After Effects renders through SmartFX, Premiere through PF_Cmd_RENDER. No globals, one scratch per thread: safe for MFR.
+// Liquid Glass for Adobe: AE reads the layer outline and the composite below an idle-created helper.
+// Raster inputs keep layer coordinates; backdrop sampling follows AE transforms and SmartFX origins.
+// LG_BRIGHTNESS builds the AE-only luma-mask effect; the main binary also supports Premiere adjustment layers.
+// SmartFX uses per-frame settings and per-thread scratch for Multi-Frame Rendering.
 #include "AEConfig.h"
 #include "AE_EffectUI.h"
 #include <adobesdk/DrawbotSuite.h>
@@ -18,21 +17,17 @@
 #include "GlassHost.h"
 #include "GlassStudioModel.h"
 #include "LiquidGlassNames.h"
-#include <cstdio>
-#include <cstdlib>
 
 enum { MAJOR = 1, MINOR = 0, BUG = 0, BUILD = 0 };
 static AEGP_PluginID gPlugin = 0; // both written once in GLOBAL_SETUP, before any render thread exists
 static SPBasicSuite* gBasic = nullptr;
 
-// TEMP spike log, removed before commit.
-#define LG_LOG(...) do { if (const char* p_ = std::getenv("LG_TEST_LOG")) { if (FILE* f_ = std::fopen(p_, "a")) { std::fprintf(f_, __VA_ARGS__); std::fprintf(f_, "\n"); std::fclose(f_); } } } while (0)
 // Checkout ids of the extra layers in a smart render.
 enum { CHECK_INPUT = 0, CHECK_SHAPE = 1, CHECK_BACK = 2 };
 
 static PF_Err About(PF_InData* in_data, PF_OutData* out_data)
 {
-	PF_SPRINTF(out_data->return_msg, "Liquid Glass %d.%d by CGSudo\rRefracting glass, keyframeable. Put it on an adjustment layer.", MAJOR, MINOR);
+	PF_SPRINTF(out_data->return_msg, "%s %d.%d.%d by CGSudo\rhttps://www.linkedin.com/in/cgsudo\rhttps://github.com/CGSudo/liquid-glass-for-adobe", LG_NAME, MAJOR, MINOR, BUG);
 	return PF_Err_NONE;
 }
 
@@ -45,11 +40,14 @@ static void RegisterIdle(PF_InData* in_data, PF_OutData* out_data)
 
 static PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data)
 {
+#ifdef LG_BRIGHTNESS
+	if (in_data->appl_id == kAppID_Premiere) return PF_Err_INVALID_CALLBACK;
+#endif
 	if (lg_param_count() != kCoreCount) return PF_Err_INTERNAL_STRUCT_DAMAGED; // engine and host out of step
 	out_data->my_version = PF_VERSION(MAJOR, MINOR, BUG, PF_Stage_RELEASE, BUILD);
 	out_data->out_flags = PF_OutFlag_DEEP_COLOR_AWARE | PF_OutFlag_I_EXPAND_BUFFER | PF_OutFlag_CUSTOM_UI;
 	out_data->out_flags2 = PF_OutFlag2_PARAM_GROUP_START_COLLAPSED_FLAG | PF_OutFlag2_SUPPORTS_SMART_RENDER | PF_OutFlag2_FLOAT_COLOR_AWARE |
-		PF_OutFlag2_I_MIX_GUID_DEPENDENCIES | PF_OutFlag2_SUPPORTS_THREADED_RENDERING;
+		PF_OutFlag2_I_MIX_GUID_DEPENDENCIES | PF_OutFlag2_SUPPORTS_THREADED_RENDERING | PF_OutFlag2_I_USE_3D_CAMERA;
 	if (in_data->appl_id == kAppID_Premiere) {
 		out_data->out_flags &= ~PF_OutFlag_CUSTOM_UI;
 		// Premiere has no GUID mixing, and Wobble changes with time alone.
@@ -60,7 +58,7 @@ static PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data)
 		pf->AddSupportedPixelFormat(in_data->effect_ref, PrPixelFormat_BGRA_4444_8u);
 	} else {
 		AEFX_SuiteScoper<AEGP_UtilitySuite6> util(in_data, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6, out_data);
-		util->AEGP_RegisterWithAEGP(nullptr, "Liquid Glass", &gPlugin);
+		util->AEGP_RegisterWithAEGP(nullptr, LG_NAME, &gPlugin);
 		gBasic = in_data->pica_basicP;
 		RegisterIdle(in_data, out_data);
 	}
@@ -69,7 +67,66 @@ static PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data)
 
 static float Ratio(const PF_RationalScale& r) { return r.den ? (float)r.num / r.den : 1.f; }
 
-// A shape or text layer can't see what's under it, but an effect on an adjustment layer can. So applying the effect also puts a
+static bool OwnLayerType(AEGP_ObjectType type, AEGP_LayerFlags flags)
+{
+	return (type == AEGP_ObjectType_VECTOR || type == AEGP_ObjectType_TEXT || type == AEGP_ObjectType_AV) &&
+		!(flags & (AEGP_LayerFlag_ADJUSTMENT_LAYER | AEGP_LayerFlag_NULL_LAYER));
+}
+
+static bool HasVideo(const PF_InData* in, const AEGP_LayerSuite9* ls, AEGP_LayerH layer, AEGP_ObjectType type)
+{
+	if (type != AEGP_ObjectType_AV) return type == AEGP_ObjectType_VECTOR || type == AEGP_ObjectType_TEXT;
+	AEFX_SuiteScoper<AEGP_ItemSuite9> items(in, kAEGPItemSuite, kAEGPItemSuiteVersion9, nullptr);
+	AEGP_ItemH source = nullptr;
+	AEGP_ItemFlags flags = 0;
+	return !ls->AEGP_GetLayerSourceItem(layer, &source) && source && !items->AEGP_GetItemFlags(source, &flags) && (flags & AEGP_ItemFlag_HAS_VIDEO);
+}
+
+static bool ReadBackdropMap(PF_InData* in, const AEGP_PFInterfaceSuite1* pfi, const AEGP_LayerSuite9* ls,
+	AEGP_LayerH layer, AEGP_ObjectType type, AEGP_LayerFlags flags, const A_Time& time, double map[3][3])
+{
+	if (type != AEGP_ObjectType_AV) return true; // shape and text have already been transformed before effects
+	AEFX_SuiteScoper<AEGP_ItemSuite9> items(in, kAEGPItemSuite, kAEGPItemSuiteVersion9, nullptr);
+	AEGP_ItemH source = nullptr;
+	AEGP_ItemType sourceType = AEGP_ItemType_NONE;
+	if (ls->AEGP_GetLayerSourceItem(layer, &source) || !source || items->AEGP_GetItemType(source, &sourceType)) return false;
+	if ((flags & AEGP_LayerFlag_COLLAPSE) && sourceType != AEGP_ItemType_COMP) return true; // continuously rasterized vector footage
+	A_Matrix4 layerMatrix = {};
+	if (ls->AEGP_GetLayerToWorldXform(layer, &time, &layerMatrix)) return false;
+	const double dx = Ratio(in->downsample_x), dy = Ratio(in->downsample_y);
+	if (!(dx > 0 && dy > 0)) return false;
+	if (!(flags & AEGP_LayerFlag_LAYER_IS_3D)) {
+		BackdropMap(layerMatrix.mat, dx, dy, map);
+		return true;
+	}
+	AEFX_SuiteScoper<AEGP_CompSuite13> comps(in, kAEGPCompSuite, kAEGPCompSuiteVersion13, nullptr);
+	AEGP_CompH comp = nullptr;
+	AEGP_ItemH compItem = nullptr;
+	A_long width = 0, height = 0;
+	if (ls->AEGP_GetLayerParentComp(layer, &comp) || comps->AEGP_GetItemFromComp(comp, &compItem) || items->AEGP_GetItemDimensions(compItem, &width, &height)) return false;
+	AEGP_LayerH camera = nullptr;
+	A_Matrix4 cameraMatrix = {};
+	A_FpLong zoom = 0;
+	if (pfi->AEGP_GetEffectCamera(in->effect_ref, &time, &camera)) return false;
+	if (camera) {
+		AEFX_SuiteScoper<AEGP_StreamSuite7> streams(in, kAEGPStreamSuite, kAEGPStreamSuiteVersion7, nullptr);
+		AEGP_StreamVal2 value = {};
+		if (ls->AEGP_GetLayerToWorldXform(camera, &time, &cameraMatrix) ||
+			streams->AEGP_GetLayerStreamValue(camera, AEGP_LayerStream_ZOOM, AEGP_LTimeMode_CompTime, &time, FALSE, &value, nullptr)) return false;
+		zoom = value.one_d;
+	} else {
+		AEFX_SuiteScoper<AEGP_CameraSuite2> cameras(in, kAEGPCameraSuite, kAEGPCameraSuiteVersion2, nullptr);
+		if (cameras->AEGP_GetDefaultCameraDistanceToImagePlane(comp, &zoom)) return false;
+		for (int i = 0; i < 4; i++) cameraMatrix.mat[i][i] = 1;
+		cameraMatrix.mat[3][0] = width * 0.5;
+		cameraMatrix.mat[3][1] = height * 0.5;
+		cameraMatrix.mat[3][2] = -zoom;
+	}
+	// shortcut: camera projection assumes square pixels; add pixel-aspect conversion when validating anamorphic comps.
+	return zoom > 0 && CameraBackdropMap(layerMatrix.mat, cameraMatrix.mat, zoom, width, height, dx, dy, map);
+}
+
+// An ordinary AV layer can't see what's under it, but an effect on an adjustment layer can. So applying the effect also puts a
 // small adjustment layer right below (an empty shape layer, so no Solid lands in the project), and the render reads through it.
 #define LG_BACKDROP_LAYER "Liquid Glass backdrop"
 
@@ -104,7 +161,6 @@ static void MakeBackdropLayer(const PF_InData* in_data, PF_OutData* out_data, co
 	cs->AEGP_GetNewCollectionFromCompSelection(gPlugin, comp, &selected);
 	AEGP_LayerH helper = nullptr;
 	A_Err e = cs->AEGP_CreateVectorLayerInComp(comp, &helper);
-	LG_LOG("create helper err=%d", (int)e);
 	if (!e && helper) {
 		const char* name = LG_BACKDROP_LAYER;
 		A_UTF16Char wide[64] = {};
@@ -119,7 +175,6 @@ static void MakeBackdropLayer(const PF_InData* in_data, PF_OutData* out_data, co
 				AEGP_EffectRefH slider = nullptr;
 				e = fx->AEGP_ApplyEffect(gPlugin, helper, key, &slider);
 				if (slider) fx->AEGP_DisposeEffect(slider);
-				LG_LOG("slider err=%d", (int)e);
 				break;
 			}
 		}
@@ -127,7 +182,6 @@ static void MakeBackdropLayer(const PF_InData* in_data, PF_OutData* out_data, co
 		A_long at = 0;
 		ls->AEGP_GetLayerIndex(layer, &at);
 		e = ls->AEGP_ReorderLayer(helper, at);
-		LG_LOG("reorder to %d err=%d", (int)at, (int)e);
 	}
 	if (selected) {
 		cs->AEGP_SetSelection(comp, selected);
@@ -146,6 +200,9 @@ static std::vector<NewGlass> gNewGlass;
 // Hides the built-in shape controls of this effect on the layer: they mean nothing when the layer itself is the shape.
 static void HideShapeControls(const PF_InData* in_data, AEGP_LayerH layer)
 {
+	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(in_data, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, nullptr);
+	AEGP_ObjectType type = AEGP_ObjectType_NONE;
+	ls->AEGP_GetLayerObjectType(layer, &type);
 	AEFX_SuiteScoper<AEGP_EffectSuite5> fx(in_data, kAEGPEffectSuite, kAEGPEffectSuiteVersion5, nullptr);
 	AEFX_SuiteScoper<AEGP_StreamSuite7> ss(in_data, kAEGPStreamSuite, kAEGPStreamSuiteVersion7, nullptr);
 	AEFX_SuiteScoper<AEGP_DynamicStreamSuite4> ds(in_data, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4, nullptr);
@@ -161,14 +218,14 @@ static void HideShapeControls(const PF_InData* in_data, AEGP_LayerH layer)
 				for (int id = from; id <= to; id++) {
 					AEGP_StreamRefH st = nullptr;
 					if (ss->AEGP_GetNewEffectStreamByIndex(gPlugin, ref, IndexOf(id), &st) || !st) continue;
-					A_Err h = ds->AEGP_SetDynamicStreamFlag(st, AEGP_DynStreamFlag_HIDDEN, FALSE, TRUE);
-					if (h) LG_LOG("hide %d err=%d", id, (int)h);
+					ds->AEGP_SetDynamicStreamFlag(st, AEGP_DynStreamFlag_HIDDEN, FALSE, TRUE);
 					ss->AEGP_DisposeStream(st);
 				}
 			};
 			hide(P_T_SHAPE, P_E_SHAPE2);
 			hide(P_FOLLOW, P_FOLLOW);
 			hide(P_T_ANIM, P_E_ANIM);
+			if (type != AEGP_ObjectType_TEXT) hide(P_LIQUID_LETTERS, P_LIQUID_LETTERS);
 		}
 		fx->AEGP_DisposeEffect(ref);
 	}
@@ -178,7 +235,6 @@ static void HideShapeControls(const PF_InData* in_data, AEGP_LayerH layer)
 static A_Err OnIdle(AEGP_GlobalRefcon, AEGP_IdleRefcon, A_long*)
 {
 	if (gNewGlass.empty() || !gBasic) return A_Err_NONE;
-	LG_LOG("idle: %d to do", (int)gNewGlass.size());
 	const std::vector<NewGlass> todo = std::move(gNewGlass);
 	gNewGlass.clear();
 	PF_InData host = {}; // the suite helpers only read the suite pointer from it
@@ -202,10 +258,12 @@ static A_Err OnIdle(AEGP_GlobalRefcon, AEGP_IdleRefcon, A_long*)
 		}
 		AEGP_CompH comp = nullptr;
 		AEGP_LayerH layer = nullptr;
-		if (!item || cs->AEGP_GetCompFromItem(item, &comp) || !comp || ls->AEGP_GetLayerFromLayerID(comp, g.layer, &layer) || !layer) { LG_LOG("idle: layer gone"); continue; }
-		LG_LOG("idle: found layer");
+		if (!item || cs->AEGP_GetCompFromItem(item, &comp) || !comp || ls->AEGP_GetLayerFromLayerID(comp, g.layer, &layer) || !layer) { continue; }
+		AEGP_ObjectType type = AEGP_ObjectType_NONE;
+		AEGP_LayerFlags flags = 0;
+		if (ls->AEGP_GetLayerObjectType(layer, &type) || ls->AEGP_GetLayerFlags(layer, &flags) ||
+			!OwnLayerType(type, flags) || !HasVideo(&host, ls.get(), layer, type)) continue;
 		HideShapeControls(&host, layer);
-		LG_LOG("idle: hidden");
 		A_long at = 0, count = 0;
 		AEGP_LayerH below = nullptr;
 		if (ls->AEGP_GetLayerIndex(layer, &at) || ls->AEGP_GetCompNumLayers(comp, &count)) continue;
@@ -226,14 +284,14 @@ static PF_Err SequenceSetup(PF_InData* in_data, PF_OutData* out_data)
 	AEFX_SuiteScoper<AEGP_ItemSuite9> is(in_data, kAEGPItemSuite, kAEGPItemSuiteVersion9, out_data);
 	AEGP_LayerH layer = nullptr;
 	AEGP_ObjectType type = AEGP_ObjectType_NONE;
-	if (pfi->AEGP_GetEffectLayer(in_data->effect_ref, &layer) || !layer || ls->AEGP_GetLayerObjectType(layer, &type)) return PF_Err_NONE;
-	if (type != AEGP_ObjectType_VECTOR && type != AEGP_ObjectType_TEXT) return PF_Err_NONE;
+	AEGP_LayerFlags flags = 0;
+	if (pfi->AEGP_GetEffectLayer(in_data->effect_ref, &layer) || !layer || ls->AEGP_GetLayerObjectType(layer, &type) || ls->AEGP_GetLayerFlags(layer, &flags)) return PF_Err_NONE;
+	if (!OwnLayerType(type, flags) || !HasVideo(in_data, ls.get(), layer, type)) return PF_Err_NONE;
 	AEGP_CompH comp = nullptr;
 	AEGP_ItemH item = nullptr;
 	NewGlass g = {};
 	if (ls->AEGP_GetLayerParentComp(layer, &comp) || cs->AEGP_GetItemFromComp(comp, &item) || is->AEGP_GetItemID(item, &g.compItem) || ls->AEGP_GetLayerID(layer, &g.layer)) return PF_Err_NONE;
 	gNewGlass.push_back(g);
-	LG_LOG("setup: noted layer %d in comp item %d", (int)g.layer, (int)g.compItem);
 	return PF_Err_NONE;
 }
 
@@ -245,7 +303,8 @@ struct UnderFrame {
 	AEGP_FrameReceiptH receipt = nullptr;
 	World world;
 	bool ok = false;
-	bool shapeOrText = false; // and not switched to Adjustment by hand
+	bool ownLayer = false, textLayer = false, unsupported = true;
+	double map[3][3] = { {1, 0, 0}, {0, 1, 0}, {0, 0, 1} };
 
 	UnderFrame(PF_InData* in, PF_OutData* out) : id(in), od(out)
 	{
@@ -257,8 +316,16 @@ struct UnderFrame {
 		AEGP_ObjectType type = AEGP_ObjectType_NONE;
 		AEGP_LayerFlags flags = 0;
 		if (pfi->AEGP_GetEffectLayer(id->effect_ref, &layer) || !layer || ls->AEGP_GetLayerObjectType(layer, &type) || ls->AEGP_GetLayerFlags(layer, &flags)) return;
-		if ((type != AEGP_ObjectType_VECTOR && type != AEGP_ObjectType_TEXT) || (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER)) return;
-		shapeOrText = true;
+		if (flags & AEGP_LayerFlag_NULL_LAYER) return;
+		if (!HasVideo(id, ls.get(), layer, type)) return;
+		unsupported = false;
+		if (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER) return;
+		if (!OwnLayerType(type, flags)) { unsupported = true; return; }
+		ownLayer = true;
+		textLayer = type == AEGP_ObjectType_TEXT;
+		A_Time time = {};
+		if (pfi->AEGP_ConvertEffectToCompTime(id->effect_ref, id->current_time, id->time_scale, &time) ||
+			!ReadBackdropMap(id, pfi.get(), ls.get(), layer, type, flags, time, map)) return;
 
 		AEGP_CompH comp = nullptr;
 		A_long at = 0, count = 0;
@@ -268,7 +335,6 @@ struct UnderFrame {
 			AEGP_LayerH l = nullptr;
 			if (!ls->AEGP_GetCompLayerByIndex(comp, i, &l) && l && IsBackdropLayer(ls.get(), mem.get(), l)) helper = l;
 		}
-		LG_LOG("layer index %d of %d helper=%p", (int)at, (int)count, (void*)helper);
 		if (!helper) return;
 
 		AEFX_SuiteScoper<AEGP_EffectSuite5> fx(id, kAEGPEffectSuite, kAEGPEffectSuiteVersion5, od);
@@ -280,9 +346,8 @@ struct UnderFrame {
 		A_Err e = fx->AEGP_GetLayerEffectByIndex(gPlugin, helper, 0, &tap);
 		if (!e) e = lro->AEGP_NewFromUpstreamOfEffect(gPlugin, tap, &opt);
 		if (!e) {
-			A_Time t = {}, st = { id->time_step, (A_u_long)id->time_scale };
-			pfi->AEGP_ConvertEffectToCompTime(id->effect_ref, id->current_time, id->time_scale, &t);
-			lro->AEGP_SetTime(opt, t);
+			A_Time st = { id->time_step, (A_u_long)id->time_scale };
+			lro->AEGP_SetTime(opt, time);
 			lro->AEGP_SetTimeStep(opt, st);
 			lro->AEGP_SetWorldType(opt, AEGP_WorldType_8);
 			lro->AEGP_SetDownsampleFactor(opt, (A_short)(1 / Ratio(id->downsample_x) + 0.5f), (A_short)(1 / Ratio(id->downsample_y) + 0.5f));
@@ -290,7 +355,7 @@ struct UnderFrame {
 		}
 		if (opt) lro->AEGP_Dispose(opt);
 		if (tap) fx->AEGP_DisposeEffect(tap);
-		if (e || !receipt) { LG_LOG("under render err=%d", (int)e); return; }
+		if (e || !receipt) { return; }
 		AEGP_WorldH wh = nullptr;
 		A_long w = 0, h = 0;
 		A_u_long rb = 0;
@@ -300,13 +365,18 @@ struct UnderFrame {
 		world.rowbytes = (int)rb;
 		world.w = w;
 		world.h = h;
+		A_LRect region = {};
+		if (rs->AEGP_GetRenderedRegion(receipt, &region)) return;
+		world.ox = region.left;
+		world.oy = region.top;
 		ok = true;
-		LG_LOG("under %dx%d", w, h);
 	}
 	// AE doesn't know the glass depends on this frame: without this, changes below would leave stale glass in the cache.
 	void MixGuid(PF_PreRenderExtra* extra)
 	{
 		if (!receipt || !extra->cb->GuidMixInPtr) return;
+		extra->cb->GuidMixInPtr(id->effect_ref, sizeof map, map);
+		extra->cb->GuidMixInPtr(id->effect_ref, sizeof textLayer, &textLayer);
 		AEFX_SuiteScoper<AEGP_RenderSuite5> rs(id, kAEGPRenderSuite, kAEGPRenderSuiteVersion5, od);
 		AEFX_SuiteScoper<AEGP_MemorySuite1> mem(id, kAEGPMemorySuite, kAEGPMemorySuiteVersion1, od);
 		AEGP_MemHandle guid = nullptr;
@@ -463,11 +533,22 @@ static PF_Err ReadSettings(PF_InData* in_data, PF_ParamDef* params[], Settings& 
 			x = (float)FIX_2_FLOAT(d.u.td.x_value);
 			y = (float)FIX_2_FLOAT(d.u.td.y_value);
 			break;
-		case K_COLOR:
+		case K_COLOR: {
 			s.core[r.core] = d.u.cd.value.red / 255.f;
 			s.core[r.core + 1] = d.u.cd.value.green / 255.f;
 			s.core[r.core + 2] = d.u.cd.value.blue / 255.f;
+			if (in_data->appl_id != kAppID_Premiere) {
+				AEFX_SuiteScoper<PF_ColorParamSuite1> colors(in_data, kPFColorParamSuite, kPFColorParamSuiteVersion1, nullptr);
+				PF_PixelFloat color = {};
+				ERR(colors->PF_GetFloatingPointColorFromColorDef(in_data->effect_ref, &d, &color));
+				if (!err) {
+					s.core[r.core] = color.red;
+					s.core[r.core + 1] = color.green;
+					s.core[r.core + 2] = color.blue;
+				}
+			}
 			break;
+		}
 		default: break;
 		}
 		if (r.core >= 0 && r.kind != K_COLOR) s.core[r.core] = r.kind == K_POPUP ? v - 1 : v;
@@ -489,6 +570,12 @@ static PF_Err ReadSettings(PF_InData* in_data, PF_ParamDef* params[], Settings& 
 		case P_FOLLOW: s.follow = v != 0; break;
 		case P_WOBBLE: s.wobble = v; break;
 		case P_WOBBLE_SPEED: s.wobbleSpeed = v; break;
+		case P_LIQUID_LETTERS: s.liquidLetters = v != 0; break;
+#ifdef LG_BRIGHTNESS
+		case P_THRESHOLD: s.threshold = v; break;
+		case P_MASK_SOFTNESS: s.maskSoftness = v; break;
+		case P_INVERT: s.invertMask = v != 0; break;
+#endif
 		default: break;
 		}
 		if (!params) ERR2(PF_CHECKIN_PARAM(in_data, &held));
@@ -557,14 +644,20 @@ static PF_Err SmartPreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRen
 	if (err) return err;
 
 	UnderFrame under(in_data, out_data);
+	s.textLayer = under.textLayer;
 	if (under.ok) {
 		s.ownLayer = true;
 		s.clipAlpha = true; // the layer is the outline; its colour is never used
+		std::memcpy(s.backdropMap, under.map, sizeof s.backdropMap);
+#ifdef LG_BRIGHTNESS
+		s.brightnessMask = true;
+#endif
 		under.MixGuid(extra);
 	}
-	s.noGlass = under.shapeOrText && !under.ok;
+	s.noGlass = under.unsupported || (under.ownLayer && !under.ok);
+	if (s.noGlass) s.clipAlpha = false;
 	const Rect request = FromLRect(extra->input->output_request.rect);
-	const int margin = Margin(s.core, Ratio(in_data->downsample_x)) + (s.ownLayer ? (int)std::ceil(s.core[20] * 0.5f) : 0);
+	const int margin = Margin(s.core, Ratio(in_data->downsample_x)) + (MergeParts(s) ? (int)std::ceil(s.core[20] * 0.5f) : 0);
 	PF_RenderRequest req = extra->input->output_request;
 	req.channel_mask = PF_ChannelMask_ARGB;
 	req.rect = ToLRect(Grow(request, margin)); // the lens and the frost read past the requested area
@@ -575,12 +668,14 @@ static PF_Err SmartPreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRen
 	AEFX_CLR_STRUCT(shape);
 	AEFX_CLR_STRUCT(back);
 	ERR(extra->cb->checkout_layer(in_data->effect_ref, 0, CHECK_INPUT, &req, in_data->current_time, in_data->time_step, in_data->time_scale, &in));
-	ERR(extra->cb->checkout_layer(in_data->effect_ref, IndexOf(P_SHAPE_LAYER), CHECK_SHAPE, &req, in_data->current_time, in_data->time_step, in_data->time_scale, &shape));
-	ERR(extra->cb->checkout_layer(in_data->effect_ref, IndexOf(P_BACK_LAYER), CHECK_BACK, &req, in_data->current_time, in_data->time_step, in_data->time_scale, &back));
+	if (!s.ownLayer && !s.noGlass) {
+		ERR(extra->cb->checkout_layer(in_data->effect_ref, IndexOf(P_SHAPE_LAYER), CHECK_SHAPE, &req, in_data->current_time, in_data->time_step, in_data->time_scale, &shape));
+		ERR(extra->cb->checkout_layer(in_data->effect_ref, IndexOf(P_BACK_LAYER), CHECK_BACK, &req, in_data->current_time, in_data->time_step, in_data->time_scale, &back));
+	}
 	if (err) return err;
 
 	// Glass may reach past the input (a shadow off the edge of a small layer). Outside it, the input just passes through.
-	const Rect shapeMax = FromLRect(shape.max_result_rect);
+	const Rect shapeMax = s.ownLayer ? Rect{} : FromLRect(shape.max_result_rect);
 	const Rect glassMax = s.noGlass ? Rect{} : !shapeMax.empty() ? Grow(shapeMax, margin) : s.clipAlpha ? Grow(FromLRect(in.max_result_rect), margin) : Grow(BuiltInBounds(s), margin);
 	Rect inResult = FromLRect(in.result_rect);
 	if (s.clipAlpha) inResult = {}; // the input isn't passed through in this mode
@@ -630,7 +725,6 @@ static PF_Err Draw(PF_InData* in_data, PF_OutData* out_data, const Settings& s, 
 	if (hasShape) wShape = ToWorld(*shape, smart);
 	if (hasBack) wBack = ToWorld(*back, smart);
 	Scratch& sc = ThreadScratch();
-	LG_LOG("draw in %d,%d %dx%d out %d,%d %dx%d", wIn.ox, wIn.oy, wIn.w, wIn.h, out->origin_x, out->origin_y, out->width, out->height);
 	int e = RenderFrame(fmt, s, wIn, ToWorld(*out, smart), hasShape ? &wShape : nullptr, hasBack ? &wBack : nullptr, sc, under);
 	TrimScratch(sc);
 	return e ? PF_Err_OUT_OF_MEMORY : PF_Err_NONE;
@@ -642,8 +736,10 @@ static PF_Err SmartRender(PF_InData* in_data, PF_OutData* out_data, PF_SmartRend
 	const Settings& s = *static_cast<const Settings*>(extra->input->pre_render_data);
 	PF_EffectWorld* in = nullptr, * out = nullptr, * shape = nullptr, * back = nullptr;
 	ERR(extra->cb->checkout_layer_pixels(in_data->effect_ref, CHECK_INPUT, &in));
-	ERR(extra->cb->checkout_layer_pixels(in_data->effect_ref, CHECK_SHAPE, &shape));
-	ERR(extra->cb->checkout_layer_pixels(in_data->effect_ref, CHECK_BACK, &back));
+	if (!s.ownLayer && !s.noGlass) {
+		ERR(extra->cb->checkout_layer_pixels(in_data->effect_ref, CHECK_SHAPE, &shape));
+		ERR(extra->cb->checkout_layer_pixels(in_data->effect_ref, CHECK_BACK, &back));
+	}
 	ERR(extra->cb->checkout_output(in_data->effect_ref, &out));
 	if (!err && out) {
 		UnderFrame under(in_data, out_data);
