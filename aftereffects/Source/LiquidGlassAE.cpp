@@ -18,6 +18,7 @@
 #include "GlassHost.h"
 #include "GlassStudioModel.h"
 #include "LiquidGlassNames.h"
+#include "GlassPremiereSDK.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -51,7 +52,7 @@ static PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data)
 	out_data->out_flags2 = PF_OutFlag2_PARAM_GROUP_START_COLLAPSED_FLAG | PF_OutFlag2_SUPPORTS_SMART_RENDER | PF_OutFlag2_FLOAT_COLOR_AWARE |
 		PF_OutFlag2_I_MIX_GUID_DEPENDENCIES | PF_OutFlag2_SUPPORTS_THREADED_RENDERING;
 	if (in_data->appl_id == kAppID_Premiere) {
-		out_data->out_flags &= ~PF_OutFlag_CUSTOM_UI;
+		PremiereSetup(in_data, out_data);
 		// Premiere has no GUID mixing, and Wobble changes with time alone.
 		out_data->out_flags |= PF_OutFlag_NON_PARAM_VARY;
 		AEFX_SuiteScoper<PF_PixelFormatSuite1> pf(in_data, kPFPixelFormatSuite, kPFPixelFormatSuiteVersion1, out_data);
@@ -331,8 +332,11 @@ struct UnderFrame {
 static PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data)
 {
 	PF_ParamDef def;
+	const bool premiere = in_data->appl_id == kAppID_Premiere;
+	const bool studio = !premiere || PremiereStudioAvailable(in_data);
 	for (const Row& r : kRows) {
 		AEFX_CLR_STRUCT(def);
+		if (premiere && r.id == P_BACK_LAYER) def.ui_flags = PF_PUI_INVISIBLE;
 		switch (r.kind) {
 		case K_TOPIC:
 			if (in_data->appl_id != kAppID_Premiere) def.flags = PF_ParamFlag_START_COLLAPSED;
@@ -343,7 +347,7 @@ static PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data)
 			break;
 		case K_END: PF_END_TOPIC(r.id); break;
 		case K_FLOAT:
-			PF_ADD_FLOAT_SLIDERX(r.label, r.min, r.max, r.min, r.max, r.dflt, r.prec, 0, 0, r.id);
+			PF_ADD_FLOAT_SLIDERX(r.label, r.min, r.max, r.min, r.max, premiere && r.id == P_DISP ? 0 : r.dflt, r.prec, 0, 0, r.id);
 			break;
 		case K_ANGLE: PF_ADD_ANGLE(r.label, r.dflt, r.id); break;
 		case K_COLOR: {
@@ -361,23 +365,23 @@ static PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data)
 		case K_LOOK: {
 			def.flags = PF_ParamFlag_SUPERVISE | PF_ParamFlag_CANNOT_TIME_VARY;
 			// Reuse the first parameter's custom control so saved projects and Premiere keep every index.
-			if (in_data->appl_id != kAppID_Premiere) {
+			if (studio) {
 				def.ui_flags = PF_PUI_CONTROL | PF_PUI_DONT_ERASE_CONTROL;
 				def.ui_width = studio::kWidth;
 				def.ui_height = studio::kHeight;
 			}
-			PF_ADD_POPUP(in_data->appl_id == kAppID_Premiere ? r.label : "Glass Studio", kLookCount + 1, 1, r.items, r.id);
+			PF_ADD_POPUP(studio ? "Glass Studio" : r.label, kLookCount + 1, 1, r.items, r.id);
 			break;
 		}
 		case K_CHECK:
-			PF_ADD_CHECKBOXX(r.label, FALSE, 0, r.id);
+			PF_ADD_CHECKBOXX(r.label, premiere && r.id == P_CLIP_ALPHA, 0, r.id);
 			break;
 		case K_POINT: PF_ADD_POINT(r.label, r.max, r.dflt, FALSE, r.id); break;
-		case K_LAYER: PF_ADD_LAYER(r.label, PF_LayerDefault_NONE, r.id); break;
+		case K_LAYER: PF_ADD_LAYER(premiere && r.id == P_SHAPE_LAYER ? "Glass from" : r.label, PF_LayerDefault_NONE, r.id); break;
 		}
 	}
 	out_data->num_params = kRowCount + 1;
-	if (in_data->appl_id != kAppID_Premiere) {
+	if (studio) {
 		PF_CustomUIInfo ci = {};
 		ci.events = PF_CustomEFlag_EFFECT;
 		return in_data->inter.register_ui(in_data->effect_ref, &ci);
@@ -654,8 +658,56 @@ static PF_Err SmartRender(PF_InData* in_data, PF_OutData* out_data, PF_SmartRend
 }
 
 // Premiere: the frame arrives whole; layer parameters are checked out like any other.
+static PF_Err RenderPremiere(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_LayerDef* output)
+{
+	Settings s;
+	PF_Err err = ReadSettings(in_data, params, s);
+	if (err) return err;
+	PixFmt fmt, inputFmt;
+	if ((err = WorldFormat(in_data, out_data, output, fmt))) return err;
+	if ((err = WorldFormat(in_data, out_data, &params[0]->u.ld, inputFmt))) return err;
+	if (fmt != inputFmt) return PF_Err_BAD_CALLBACK_PARAM;
+	struct Checkout {
+		PF_InData* in;
+		PF_ParamDef param = {};
+		bool held = false;
+		~Checkout() { if (held) PF_CHECKIN_PARAM(in, &param); }
+	} shape{ in_data };
+	shape.held = !PF_CHECKOUT_PARAM(in_data, IndexOf(P_SHAPE_LAYER), in_data->current_time,
+		in_data->time_step, in_data->time_scale, &shape.param);
+	World input = ToWorld(params[0]->u.ld, false), out = ToWorld(*output, false), mask, backdrop;
+	const World* alpha = nullptr;
+	const World* back = nullptr;
+	if (shape.held && shape.param.u.ld.data) {
+		PixFmt shapeFmt;
+		if (!WorldFormat(in_data, out_data, &shape.param.u.ld, shapeFmt) && shapeFmt == fmt) {
+			mask = ToWorld(shape.param.u.ld, false);
+			alpha = &mask;
+		} else s.noGlass = true; // never read an ARGB checkout as BGRA or float
+	}
+	PremiereBackground background(in_data);
+	if (!alpha && background.frame && background.frame->data) {
+		PixFmt backFmt;
+		if (!WorldFormat(in_data, out_data, background.frame, backFmt) && backFmt == fmt) {
+			backdrop = ToWorld(*background.frame, false);
+			back = &backdrop;
+		}
+	}
+	if (!shape.held) s.noGlass = true;
+	const int letters = PremiereRowByLabel("Liquid letters");
+	// shortcut: alpha carries no text/graphic type; keep fusion conservative until Premiere exposes source metadata.
+	if (letters > 0 && kRows[letters - 1].kind == K_CHECK && !params[letters]->u.bd.value) s.core[20] = 0;
+	if (s.noGlass || (s.clipAlpha && !alpha && !back))
+		PF_SPRINTF(out_data->return_msg, "Liquid Glass: use an adjustment layer, hide the source track output and select it in Glass from. No backdrop picker is needed.");
+	Scratch& scratch = ThreadScratch();
+	int result = RenderPremiereFrame(fmt, s, input, out, alpha, back, s.clipAlpha, scratch);
+	TrimScratch(scratch);
+	return result ? PF_Err_OUT_OF_MEMORY : PF_Err_NONE;
+}
+
 static PF_Err Render(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_LayerDef* output)
 {
+	if (in_data->appl_id == kAppID_Premiere) return RenderPremiere(in_data, out_data, params, output);
 	PF_Err err = PF_Err_NONE, err2 = PF_Err_NONE;
 	Settings s;
 	ERR(ReadSettings(in_data, params, s));

@@ -161,6 +161,7 @@ static void Core(PF_ParamDef* params[], float* core)
 // Metadata only: drawing must never acquire a comp frame or enter the renderer.
 static std::string Status(PF_InData* in, PF_OutData* out)
 {
+	if (in->appl_id == kAppID_Premiere) return "Glass from needs an adjustment layer and hidden source track";
 	AEFX_SuiteScoper<AEGP_PFInterfaceSuite1> pfi(in, kAEGPPFInterfaceSuite, kAEGPPFInterfaceSuiteVersion1, out);
 	AEFX_SuiteScoper<AEGP_LayerSuite9> ls(in, kAEGPLayerSuite, kAEGPLayerSuiteVersion9, out);
 	AEFX_SuiteScoper<AEGP_MemorySuite1> mem(in, kAEGPMemorySuite, kAEGPMemorySuiteVersion1, out);
@@ -310,8 +311,8 @@ static PF_Err Draw(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_Eve
 
 static PF_Err Event(PF_InData* in, PF_OutData* out, PF_ParamDef* params[], PF_EventExtra* e)
 {
-	// Premiere has no registered custom control and must never acquire AE-only UI suites.
-	if (in->appl_id == kAppID_Premiere || !e || !e->contextH || (*e->contextH)->w_type != PF_Window_EFFECT ||
+	// Premiere uses this control only when all required PF and Drawbot suites are available.
+	if ((in->appl_id == kAppID_Premiere && !PremiereStudioAvailable(in)) || !e || !e->contextH || (*e->contextH)->w_type != PF_Window_EFFECT ||
 		e->effect_win.index != IndexOf(P_LOOK) || e->effect_win.area != PF_EA_CONTROL) return PF_Err_NONE;
 	const float w = studio::PanelWidth((float)e->effect_win.current_frame.right - e->effect_win.current_frame.left);
 	if (e->e_type == PF_Event_DRAW) return Draw(in, out, params, e, w);
